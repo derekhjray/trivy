@@ -40,6 +40,7 @@ var (
 			types.MisconfigScanner,
 			types.SecretScanner,
 			types.LicenseScanner,
+			types.WeakPasswordScanner,
 		}),
 		ValueNormalize: func(ss []string) []string {
 			return lo.Map(ss, func(s string, _ int) string {
@@ -110,6 +111,12 @@ var (
   - "comprehensive": Aims to detect more security findings at the cost of potential false positives.
 `,
 	}
+	LargeFileLimitFlag = Flag[int]{
+		Name:       "large-file-limit",
+		ConfigName: "scan.large-file-limit",
+		Default:    100 << 20, // 100M
+		Usage:      "[EXPERIMENTAL] specify large file size limitation",
+	}
 )
 
 type ScanFlagGroup struct {
@@ -123,6 +130,7 @@ type ScanFlagGroup struct {
 	SBOMSources       *Flag[[]string]
 	RekorURL          *Flag[string]
 	DetectionPriority *Flag[string]
+	LargeFileLimit    *Flag[int]
 }
 
 type ScanOptions struct {
@@ -136,6 +144,7 @@ type ScanOptions struct {
 	SBOMSources       []string
 	RekorURL          string
 	DetectionPriority ftypes.DetectionPriority
+	LargeFileLimit    int
 }
 
 func NewScanFlagGroup() *ScanFlagGroup {
@@ -150,6 +159,7 @@ func NewScanFlagGroup() *ScanFlagGroup {
 		RekorURL:          RekorURLFlag.Clone(),
 		Slow:              SlowFlag.Clone(),
 		DetectionPriority: DetectionPriority.Clone(),
+		LargeFileLimit:    LargeFileLimitFlag.Clone(),
 	}
 }
 
@@ -169,6 +179,7 @@ func (f *ScanFlagGroup) Flags() []Flagger {
 		f.SBOMSources,
 		f.RekorURL,
 		f.DetectionPriority,
+		f.LargeFileLimit,
 	}
 }
 
@@ -199,5 +210,6 @@ func (f *ScanFlagGroup) ToOptions(args []string) (ScanOptions, error) {
 		SBOMSources:       f.SBOMSources.Value(),
 		RekorURL:          f.RekorURL.Value(),
 		DetectionPriority: ftypes.DetectionPriority(f.DetectionPriority.Value()),
+		LargeFileLimit:    f.LargeFileLimit.Value(),
 	}, nil
 }

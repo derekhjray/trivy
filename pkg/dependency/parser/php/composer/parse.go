@@ -1,6 +1,7 @@
 package composer
 
 import (
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -24,6 +25,10 @@ type packageInfo struct {
 	Version   string            `json:"version"`
 	Require   map[string]string `json:"require"`
 	License   any               `json:"license"`
+	Authors []struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	} `json:"authors"`
 	StartLine int
 	EndLine   int
 }
@@ -51,12 +56,24 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependenc
 	pkgs := make(map[string]ftypes.Package)
 	foundDeps := make(map[string][]string)
 	for _, lpkg := range lockFile.Packages {
+		authors := make([]string, 0, len(lpkg.Authors))
+		for _, author := range lpkg.Authors {
+			if author.Name != "" {
+				if author.Email != "" {
+					authors = append(authors, fmt.Sprintf("%s <%s>", author.Name, author.Email))
+					continue
+				}
+				authors = append(authors, author.Name)
+			}
+		}
+
 		pkg := ftypes.Package{
 			ID:           dependency.ID(ftypes.Composer, lpkg.Name, lpkg.Version),
 			Name:         lpkg.Name,
 			Version:      lpkg.Version,
 			Relationship: ftypes.RelationshipUnknown, // composer.lock file doesn't have info about direct/indirect dependencies
 			Licenses:     licenses(lpkg.License),
+			Maintainer:   strings.Join(authors, ", "),
 			Locations: []ftypes.Location{
 				{
 					StartLine: lpkg.StartLine,

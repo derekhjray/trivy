@@ -48,6 +48,8 @@ const (
 
 	// LicenseScanner is the scanner of licenses
 	LicenseScanner Scanner = "license"
+
+	WeakPasswordScanner Scanner = "weakpass"
 )
 
 var (
@@ -62,6 +64,7 @@ var (
 		RBACScanner,
 		SecretScanner,
 		LicenseScanner,
+		WeakPasswordScanner,
 		NoneScanner,
 	}
 
@@ -105,6 +108,9 @@ type ScanTarget struct {
 	Misconfigurations []types.Misconfiguration
 	Secrets           []types.Secret
 	Licenses          []types.LicenseFile
+	WeakPasswords     []types.WeakPassword
+	Users             []types.User
+	Groups            []types.Group
 
 	// CustomResources hold analysis results from custom analyzers.
 	// It is for extensibility and not used in OSS.
@@ -121,4 +127,6 @@ type ScanOptions struct {
 	LicenseCategories   map[types.LicenseCategory][]string
 	FilePatterns        []string
 	IncludeDevDeps      bool
+	WeakPasswordScanner Scanner
+	WeakPasswordConfigs []string
 }

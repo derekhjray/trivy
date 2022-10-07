@@ -190,7 +190,7 @@ func (cvf *cachedVMFile) Open() (xio.ReadSeekCloserAt, error) {
 		return nil, xerrors.Errorf("file stat error: %w", err)
 	}
 
-	cvf.cf = newCachedFile(fi.Size(), f)
+	cvf.cf = newCachedFile(fi.Size(), f, defaultSizeThreshold)
 	return cvf.cf.Open()
 }
 

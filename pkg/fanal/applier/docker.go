@@ -95,6 +95,8 @@ func ApplyLayers(layers []ftypes.BlobInfo) ftypes.ArtifactDetail {
 	sep := "/"
 	nestedMap := nested.Nested{}
 	secretsMap := make(map[string]ftypes.Secret)
+	weakpassMap := make(map[string][]ftypes.WeakPassword)
+
 	var mergedLayer ftypes.ArtifactDetail
 
 	for _, layer := range layers {
@@ -107,6 +109,10 @@ func ApplyLayers(layers []ftypes.BlobInfo) ftypes.ArtifactDetail {
 		}
 
 		mergedLayer.OS.Merge(layer.OS)
+
+		if layer.Users != nil || layer.Groups != nil {
+			applyUsersAndGroups(&mergedLayer, &layer)
+		}
 
 		if layer.Repository != nil {
 			mergedLayer.Repository = layer.Repository
@@ -144,6 +150,16 @@ func ApplyLayers(layers []ftypes.BlobInfo) ftypes.ArtifactDetail {
 			secretsMap = mergeSecrets(secretsMap, secret, l)
 		}
 
+		// Apply weak passwords
+		for _, password := range layer.WeakPasswords {
+			password.Layer = ftypes.Layer{
+				Digest:    layer.Digest,
+				DiffID:    layer.DiffID,
+				CreatedBy: layer.CreatedBy,
+			}
+			weakpassMap = mergeWeakPasswords(weakpassMap, password)
+		}
+
 		// Apply license files
 		for _, license := range layer.Licenses {
 			license.Layer = ftypes.Layer{
@@ -178,12 +194,18 @@ func ApplyLayers(layers []ftypes.BlobInfo) ftypes.ArtifactDetail {
 			mergedLayer.Licenses = append(mergedLayer.Licenses, v)
 		case ftypes.CustomResource:
 			mergedLayer.CustomResources = append(mergedLayer.CustomResources, v)
+		case ftypes.WeakPassword:
+			mergedLayer.WeakPasswords = append(mergedLayer.WeakPasswords, v)
 		}
 		return nil
 	})
 
 	for _, s := range secretsMap {
 		mergedLayer.Secrets = append(mergedLayer.Secrets, s)
+	}
+
+	for _, passwords := range weakpassMap {
+		mergedLayer.WeakPasswords = append(mergedLayer.WeakPasswords, passwords...)
 	}
 
 	// Extract dpkg licenses
@@ -291,6 +313,26 @@ func aggregate(detail *ftypes.ArtifactDetail) {
 	detail.Applications = apps
 }
 
+func mergeWeakPasswords(weakpassMap map[string][]ftypes.WeakPassword, newWeakpass ftypes.WeakPassword) map[string][]ftypes.WeakPassword {
+	weakpasses, ok := weakpassMap[newWeakpass.Target]
+	if !ok {
+		weakpassMap[newWeakpass.Target] = []ftypes.WeakPassword{newWeakpass}
+		return weakpassMap
+	}
+
+	for i := range weakpasses {
+		if newWeakpass.Type == weakpasses[i].Type && newWeakpass.User == weakpasses[i].User && newWeakpass.Password == weakpasses[i].Password {
+			weakpasses[i] = newWeakpass
+			return weakpassMap
+		}
+	}
+
+	weakpasses = append(weakpasses, newWeakpass)
+	weakpassMap[newWeakpass.Target] = weakpasses
+
+	return weakpassMap
+}
+
 // We must save secrets from all layers even though they are removed in the uppler layer.
 // If the secret was changed at the top level, we need to overwrite it.
 func mergeSecrets(secretsMap map[string]ftypes.Secret, newSecret ftypes.Secret, layer ftypes.Layer) map[string]ftypes.Secret {
@@ -321,4 +363,50 @@ func secretFindingsContains(findings []ftypes.SecretFinding, finding ftypes.Secr
 		}
 	}
 	return false
+}
+
+func applyUsersAndGroups(merged *ftypes.ArtifactDetail, layer *ftypes.BlobInfo) {
+	if lo.IsEmpty(merged.OS) {
+		if len(layer.Users) > 0 {
+			if merged.Users == nil {
+				merged.Users = layer.Users
+			} else {
+				users := make([]ftypes.User, 0, len(layer.Users))
+				for index1 := range layer.Users {
+					exists := false
+					for index2 := range merged.Users {
+						if merged.Users[index2].ID == layer.Users[index1].ID {
+							exists = true
+							break
+						}
+					}
+					if !exists {
+						users = append(users, layer.Users[index1])
+					}
+				}
+				merged.Users = append(merged.Users, users...)
+			}
+		}
+
+		if len(layer.Groups) > 0 {
+			if merged.Groups == nil {
+				merged.Groups = layer.Groups
+			} else {
+				groups := make([]ftypes.Group, 0, len(layer.Groups))
+				for index1 := range layer.Groups {
+					exists := false
+					for index2 := range merged.Groups {
+						if merged.Groups[index2].ID == layer.Groups[index1].ID {
+							exists = true
+							break
+						}
+					}
+					if !exists {
+						groups = append(groups, layer.Groups[index1])
+					}
+				}
+				merged.Groups = append(merged.Groups, groups...)
+			}
+		}
+	}
 }

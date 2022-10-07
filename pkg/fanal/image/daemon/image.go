@@ -3,11 +3,11 @@ package daemon
 import (
 	"context"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"gitee.com/anesec/mobius/directio"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	dimage "github.com/docker/docker/api/types/image"
@@ -31,7 +31,7 @@ type opener func() (v1.Image, error)
 
 type imageSave func(context.Context, []string) (io.ReadCloser, error)
 
-func imageOpener(ctx context.Context, ref string, f *os.File, imageSave imageSave) opener {
+func imageOpener(ctx context.Context, ref string, f *directio.Writer, imageSave imageSave) opener {
 	return func() (v1.Image, error) {
 		// Store the tarball in local filesystem and return a new reader into the bytes each time we need to access something.
 		rc, err := imageSave(ctx, []string{ref})
@@ -40,7 +40,7 @@ func imageOpener(ctx context.Context, ref string, f *os.File, imageSave imageSav
 		}
 		defer rc.Close()
 
-		if _, err = io.Copy(f, rc); err != nil {
+		if _, err = directio.Copy(f, rc); err != nil {
 			return nil, xerrors.Errorf("failed to copy the image: %w", err)
 		}
 		defer f.Close()

@@ -351,6 +351,7 @@ type Flags struct {
 	ScanFlagGroup          *ScanFlagGroup
 	SecretFlagGroup        *SecretFlagGroup
 	VulnerabilityFlagGroup *VulnerabilityFlagGroup
+	WeakPasswordFlagGroup  *WeakPasswordFlagGroup
 }
 
 // Options holds all the runtime configuration
@@ -374,12 +375,18 @@ type Options struct {
 	ScanOptions
 	SecretOptions
 	VulnerabilityOptions
+	WeakPasswordOptions
 
 	// Trivy's version, not populated via CLI flags
 	AppVersion string
 
 	// We don't want to allow disabled analyzers to be passed by users, but it is necessary for internal use.
 	DisabledAnalyzers []analyzer.Type
+
+	RuntimeOnly bool
+	Report      func(any)
+
+	MemoryThreshold int64
 
 	// outputWriter is not initialized via the CLI.
 	// It is mainly used for testing purposes or by tools that use Trivy as a library.
@@ -476,6 +483,7 @@ func (o *Options) FilterOpts() result.FilterOptions {
 // CacheOpts returns options for scan cache
 func (o *Options) CacheOpts() cache.Options {
 	return cache.Options{
+		Cache:       o.Cache,
 		Backend:     o.CacheBackend,
 		CacheDir:    o.CacheDir,
 		RedisCACert: o.RedisCACert,
@@ -611,6 +619,9 @@ func (f *Flags) groups() []FlagGroup {
 	}
 	if f.RepoFlagGroup != nil {
 		groups = append(groups, f.RepoFlagGroup)
+	}
+	if f.WeakPasswordFlagGroup != nil {
+		groups = append(groups, f.WeakPasswordFlagGroup)
 	}
 	return groups
 }
@@ -805,6 +816,13 @@ func (f *Flags) ToOptions(args []string) (Options, error) {
 		opts.VulnerabilityOptions, err = f.VulnerabilityFlagGroup.ToOptions()
 		if err != nil {
 			return Options{}, xerrors.Errorf("vulnerability flag error: %w", err)
+		}
+	}
+
+	if f.WeakPasswordFlagGroup != nil {
+		opts.WeakPasswordOptions, err = f.WeakPasswordFlagGroup.ToOptions()
+		if err != nil {
+			return Options{}, xerrors.Errorf("weak password flag error: %w", err)
 		}
 	}
 

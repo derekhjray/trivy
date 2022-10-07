@@ -216,5 +216,8 @@ func removeLayer(results types.Results) {
 		for j := range result.Misconfigurations {
 			result.Misconfigurations[j].Layer = ftypes.Layer{}
 		}
+		for j := range result.WeakPasswords {
+			result.WeakPasswords[j].Layer = ftypes.Layer{}
+		}
 	}
 }

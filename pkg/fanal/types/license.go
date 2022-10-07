@@ -23,11 +23,11 @@ const (
 )
 
 type LicenseFile struct {
-	Type     LicenseType
-	FilePath string
-	PkgName  string
-	Findings LicenseFindings
-	Layer    Layer `json:",omitempty"`
+	Type     LicenseType     `json:",omitempty"`
+	FilePath string          `json:",omitempty"`
+	PkgName  string          `json:",omitempty"`
+	Findings LicenseFindings `json:",omitempty"`
+	Layer    Layer           `json:",omitempty"`
 }
 
 type LicenseFindings []LicenseFinding
@@ -51,8 +51,8 @@ func (findings LicenseFindings) Names() []string {
 }
 
 type LicenseFinding struct {
-	Category   LicenseCategory // such as "forbidden"
-	Name       string
-	Confidence float64
-	Link       string
+	Category   LicenseCategory `json:",omitempty"` // such as "forbidden"
+	Name       string          `json:",omitempty"`
+	Confidence float64         `json:",omitempty"`
+	Link       string          `json:",omitempty"`
 }

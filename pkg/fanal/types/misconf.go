@@ -46,18 +46,18 @@ type Occurrence struct {
 }
 
 type Code struct {
-	Lines []Line
+	Lines []Line `json:",omitempty"`
 }
 
 type Line struct {
-	Number      int    `json:"Number"`
-	Content     string `json:"Content"`
-	IsCause     bool   `json:"IsCause"`
-	Annotation  string `json:"Annotation"`
-	Truncated   bool   `json:"Truncated"`
+	Number      int    `json:"Number,omitempty"`
+	Content     string `json:"Content,omitempty"`
+	IsCause     bool   `json:"IsCause,omitempty"`
+	Annotation  string `json:"Annotation,omitempty"`
+	Truncated   bool   `json:"Truncated,omitempty"`
 	Highlighted string `json:"Highlighted,omitempty"`
-	FirstCause  bool   `json:"FirstCause"`
-	LastCause   bool   `json:"LastCause"`
+	FirstCause  bool   `json:"FirstCause,omitempty"`
+	LastCause   bool   `json:"LastCause,omitempty"`
 }
 
 type PolicyMetadata struct {

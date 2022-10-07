@@ -3,8 +3,10 @@ package db
 import (
 	"context"
 	"fmt"
+	"github.com/aquasecurity/trivy/pkg/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
@@ -36,6 +38,7 @@ var (
 
 type options struct {
 	artifact       *oci.Artifact
+	altArtifact    *http.Artifact
 	dbRepositories []name.Reference
 }
 
@@ -46,6 +49,13 @@ type Option func(*options)
 func WithOCIArtifact(art *oci.Artifact) Option {
 	return func(opts *options) {
 		opts.artifact = art
+	}
+}
+
+// WithHTTPArtifact takes a http artifact
+func WithHTTPArtifact(art *http.Artifact) Option {
+	return func(opts *options) {
+		opts.altArtifact = art
 	}
 }
 
@@ -102,7 +112,7 @@ func (c *Client) NeedsUpdate(ctx context.Context, cliVersion string, skip bool) 
 	}
 
 	if db.SchemaVersion < meta.Version {
-		log.ErrorContext(ctx, "Trivy version is old. Update to the latest version.", log.String("version", cliVersion))
+		log.ErrorContext(ctx, "Version is old. Update to the latest version.", log.String("version", cliVersion))
 		return false, xerrors.Errorf("the version of DB schema doesn't match. Local DB: %d, Expected: %d",
 			meta.Version, db.SchemaVersion)
 	}
@@ -121,7 +131,30 @@ func (c *Client) NeedsUpdate(ctx context.Context, cliVersion string, skip bool) 
 		return true, nil
 	}
 
-	return !c.isNewDB(ctx, meta), nil
+	if !c.isNewDB(ctx, meta) {
+		return true, nil
+	}
+
+	for _, repo := range c.dbRepositories {
+		if ref := repo.String(); strings.HasPrefix(ref, "https://") {
+			var (
+				af           *http.Artifact
+				shouldUpdate bool
+			)
+
+			if af, err = c.initHTTPArtifact(ref); err != nil {
+				return false, xerrors.Errorf("initialize http artifact: %w", err)
+			}
+
+			if shouldUpdate, err = af.NeedUpdate(); err != nil {
+				return false, xerrors.Errorf("check vulnerability database artifact state: %w", err)
+			}
+
+			return shouldUpdate, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (c *Client) validate(meta metadata.Metadata) error {
@@ -144,6 +177,7 @@ func (c *Client) isNewDB(ctx context.Context, meta metadata.Metadata) bool {
 		log.Debug("DB update was skipped because the local DB was downloaded during the last hour")
 		return true
 	}
+
 	return false
 }
 
@@ -199,6 +233,21 @@ func (c *Client) initArtifacts(opt types.RegistryOptions) oci.Artifacts {
 
 func (c *Client) downloadDB(ctx context.Context, opt types.RegistryOptions, dst string) error {
 	log.InfoContext(ctx, "Downloading vulnerability DB...")
+	for _, repo := range c.dbRepositories {
+		if ref := repo.String(); strings.HasPrefix(ref, "https://") {
+			art, err := c.initHTTPArtifact(ref)
+			if err != nil {
+				return err
+			}
+
+			if err = art.Download(ctx, dst); err != nil {
+				return xerrors.Errorf("database download error: %w", err)
+			}
+
+			return nil
+		}
+	}
+
 	downloadOpt := oci.DownloadOption{
 		MediaType: dbMediaType,
 		Quiet:     c.quiet,
@@ -217,4 +266,24 @@ func (c *Client) ShowInfo() error {
 	log.Debug("DB info", log.Int("schema", meta.Version), log.Time("updated_at", meta.UpdatedAt),
 		log.Time("next_update", meta.NextUpdate), log.Time("downloaded_at", meta.DownloadedAt))
 	return nil
+}
+
+func (c *Client) initHTTPArtifact(ref string) (*http.Artifact, error) {
+	if c.altArtifact != nil {
+		return c.altArtifact, nil
+	}
+
+	cli := metadata.NewClient(c.dbDir)
+	meta, err := cli.Get()
+	if err != nil {
+		meta = metadata.Metadata{Version: db.SchemaVersion}
+		_ = cli.Update(meta)
+	}
+
+	art, err := http.NewArtifact(ref, c.quiet, http.WithDownloadTime(meta.DownloadedAt), http.WithToken(os.Getenv("TRIVY_DB_TOKEN")))
+	if err != nil {
+		return nil, xerrors.Errorf("http artifact error: %v", err)
+	}
+
+	return art, nil
 }

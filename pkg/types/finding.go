@@ -14,6 +14,7 @@ const (
 	FindingTypeMisconfiguration FindingType = "misconfiguration"
 	FindingTypeSecret           FindingType = "secret"
 	FindingTypeLicense          FindingType = "license"
+	FindingTypeWeakPassword     FindingType = "weakpass"
 
 	FindingStatusIgnored            FindingStatus = "ignored"             // Trivy
 	FindingStatusUnknown            FindingStatus = "unknown"             // Trivy

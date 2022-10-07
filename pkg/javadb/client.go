@@ -51,8 +51,10 @@ func (u *Updater) Update() error {
 		if !errors.Is(err, os.ErrNotExist) {
 			return xerrors.Errorf("Java DB metadata error: %w", err)
 		} else if u.skip {
-			log.ErrorContext(ctx, "The first run cannot skip downloading Java DB")
-			return xerrors.New("'--skip-java-db-update' cannot be specified on the first run")
+			//log.ErrorContext(ctx, "The first run cannot skip downloading Java DB")
+			//return xerrors.New("'--skip-java-db-update' cannot be specified on the first run")
+			// TODO: just skip update java database
+			return nil
 		}
 	}
 

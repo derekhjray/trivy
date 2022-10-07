@@ -163,7 +163,7 @@ func init() {
 		for _, requiredFile := range requiredFiles {
 			base := filepath.Base(name)
 			ext := filepath.Ext(base)
-			if strings.TrimSuffix(base, ext) == requiredFile {
+			if strings.EqualFold(base, requiredFile+ext) {
 				return true
 			}
 			if strings.EqualFold(ext, "."+requiredFile) {

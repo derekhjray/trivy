@@ -3,8 +3,8 @@ package image
 import (
 	"bufio"
 	"compress/gzip"
+	"gitee.com/anesec/mobius/directio"
 	"io"
-	"os"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
@@ -23,7 +23,7 @@ func tryDockerArchive(fileName string) (v1.Image, error) {
 
 func fileOpener(fileName string) func() (io.ReadCloser, error) {
 	return func() (io.ReadCloser, error) {
-		f, err := os.Open(fileName)
+		f, err := directio.NewReader(fileName)
 		if err != nil {
 			return nil, xerrors.Errorf("unable to open the file: %w", err)
 		}

@@ -3,6 +3,7 @@ package packaging
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"net/textproto"
 	"strings"
@@ -38,6 +39,25 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependenc
 		p.logger.Debug("MIME protocol error", log.Err(err))
 	} else if err != nil && err != io.EOF {
 		return nil, nil, xerrors.Errorf("read MIME error: %w", err)
+	}
+
+	author := h.Get("Author")
+	email := h.Get("Author-email")
+	if author == "" && email != "" {
+		author = email
+	} else if author != "" && email != "" {
+		author = fmt.Sprintf("%s <%s>", author, email)
+	}
+
+	if author == "" {
+		author = h.Get("Maintainer")
+		email = h.Get("Maintainer-email")
+
+		if author == "" && email != "" {
+			author = email
+		} else if author != "" && email != "" {
+			author = fmt.Sprintf("%s <%s>", author, email)
+		}
 	}
 
 	name, version := h.Get("name"), h.Get("version")
@@ -85,9 +105,10 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) ([]ftypes.Package, []ftypes.Dependenc
 
 	return []ftypes.Package{
 		{
-			Name:     name,
-			Version:  version,
-			Licenses: licensing.SplitLicenses(license),
+			Name:       name,
+			Version:    version,
+			Licenses:   licensing.SplitLicenses(license),
+			Maintainer: author,
 		},
 	}, nil, nil
 }

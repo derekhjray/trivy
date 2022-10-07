@@ -133,6 +133,7 @@ func (s *Scanner) detect(osVer string, pkg ftypes.Package) ([]types.DetectedVuln
 			VulnerabilityID:  vulnID,
 			PkgID:            pkg.ID,
 			PkgName:          pkg.Name,
+			PkgType:          pkg.Type,
 			InstalledVersion: utils.FormatVersion(pkg),
 			PkgIdentifier:    pkg.Identifier,
 			Status:           adv.Status,

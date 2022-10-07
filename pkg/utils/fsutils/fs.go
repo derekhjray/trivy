@@ -2,6 +2,7 @@ package fsutils
 
 import (
 	"fmt"
+	"gitee.com/anesec/mobius/directio"
 	"io"
 	"io/fs"
 	"os"
@@ -42,18 +43,18 @@ func CopyFile(src, dst string) (int64, error) {
 		return 0, fmt.Errorf("%s is not a regular file", src)
 	}
 
-	source, err := os.Open(src)
+	source, err := directio.NewReader(src)
 	if err != nil {
 		return 0, err
 	}
 	defer source.Close()
 
-	destination, err := os.Create(dst)
+	destination, err := directio.Create(dst)
 	if err != nil {
 		return 0, err
 	}
 	defer destination.Close()
-	n, err := io.Copy(destination, source)
+	n, err := directio.Copy(destination, source)
 	return n, err
 }
 

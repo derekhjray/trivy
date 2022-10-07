@@ -3,6 +3,7 @@ package binary
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 
 	"golang.org/x/xerrors"
@@ -20,12 +21,19 @@ func init() {
 
 const version = 1
 
-type gobinaryLibraryAnalyzer struct{}
+type gobinaryLibraryAnalyzer struct {
+	largeFileLimit int64
+}
 
-func (a gobinaryLibraryAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInput) (*analyzer.AnalysisResult, error) {
+func (a *gobinaryLibraryAnalyzer) Init(opt analyzer.AnalyzerOptions) error {
+	a.largeFileLimit = int64(opt.LargeFileLimit)
+	return nil
+}
+
+func (a *gobinaryLibraryAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInput) (*analyzer.AnalysisResult, error) {
 	p := binary.NewParser()
 	res, err := language.Analyze(types.GoBinary, input.FilePath, input.Content, p)
-	if errors.Is(err, binary.ErrUnrecognizedExe) || errors.Is(err, binary.ErrNonGoBinary) {
+	if errors.Is(err, binary.ErrUnrecognizedExe) || errors.Is(err, binary.ErrNonGoBinary) || errors.Is(err, io.EOF) {
 		return nil, nil
 	} else if err != nil {
 		return nil, xerrors.Errorf("go binary (filepath: %s) parse error: %w", input.FilePath, err)
@@ -34,14 +42,17 @@ func (a gobinaryLibraryAnalyzer) Analyze(_ context.Context, input analyzer.Analy
 	return res, nil
 }
 
-func (a gobinaryLibraryAnalyzer) Required(_ string, fileInfo os.FileInfo) bool {
+func (a *gobinaryLibraryAnalyzer) Required(_ string, fileInfo os.FileInfo) bool {
+	if a.largeFileLimit > 0 && a.largeFileLimit < fileInfo.Size() {
+		return false
+	}
 	return utils.IsExecutable(fileInfo)
 }
 
-func (a gobinaryLibraryAnalyzer) Type() analyzer.Type {
+func (a *gobinaryLibraryAnalyzer) Type() analyzer.Type {
 	return analyzer.TypeGoBinary
 }
 
-func (a gobinaryLibraryAnalyzer) Version() int {
+func (a *gobinaryLibraryAnalyzer) Version() int {
 	return version
 }

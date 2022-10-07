@@ -7,9 +7,9 @@ import (
 )
 
 type OS struct {
-	Family OSType
-	Name   string
-	Eosl   bool `json:"EOSL,omitempty"`
+	Family OSType `json:",omitempty"`
+	Name   string `json:",omitempty"`
+	Eosl   bool   `json:"EOSL,omitempty"`
 
 	// This field is used for enhanced security maintenance programs such as Ubuntu ESM, Debian Extended LTS.
 	Extended bool `json:"extended,omitempty"`
@@ -47,6 +47,30 @@ func (o *OS) Merge(newOS OS) {
 	}
 }
 
+type User struct {
+	ID   int    `json:",omitempty"`
+	GID  int    `json:",omitempty"`
+	Name string `json:",omitempty"`
+}
+
+type Group struct {
+	ID   int    `json:",omitempty"`
+	Name string `json:",omitempty"`
+}
+
+type FileInfo struct {
+	Name       string `json:",omitempty"`
+	User       string `json:",omitempty"`
+	Group      string `json:",omitempty"`
+	Mode       string `json:",omitempty"`
+	Permission uint32 `json:",omitempty"`
+	Size       int64  `json:",omitempty"`
+	MD5        string `json:",omitempty"`
+	CreateTime int64  `json:",omitempty"`
+	ModifyTime int64  `json:",omitempty"`
+	AccessTime int64  `json:",omitempty"`
+}
+
 type Repository struct {
 	Family  OSType `json:",omitempty"`
 	Release string `json:",omitempty"`
@@ -59,34 +83,34 @@ type Layer struct {
 }
 
 type PackageInfo struct {
-	FilePath string
-	Packages Packages
+	FilePath string   `json:",omitempty"`
+	Packages Packages `json:",omitempty"`
 }
 
 type Application struct {
 	// e.g. bundler and pipenv
-	Type LangType
+	Type LangType `json:",omitempty"`
 
 	// Lock files have the file path here, while each package metadata do not have
 	FilePath string `json:",omitempty"`
 
 	// Packages is a list of lang-specific packages
-	Packages Packages
+	Packages Packages `json:",omitempty"`
 }
 
 type File struct {
-	Type    string
-	Path    string
-	Content []byte
+	Type    string `json:",omitempty"`
+	Path    string `json:",omitempty"`
+	Content []byte `json:",omitempty"`
 }
 
 // ArtifactInfo is stored in cache
 type ArtifactInfo struct {
-	SchemaVersion int
-	Architecture  string
-	Created       time.Time
-	DockerVersion string
-	OS            string
+	SchemaVersion int       `json:",omitempty"`
+	Architecture  string    `json:",omitempty"`
+	Created       time.Time `json:",omitempty"`
+	DockerVersion string    `json:",omitempty"`
+	OS            string    `json:",omitempty"`
 
 	// Misconfiguration holds misconfiguration in container image config
 	Misconfiguration *Misconfiguration `json:",omitempty"`
@@ -100,7 +124,7 @@ type ArtifactInfo struct {
 
 // BlobInfo is stored in cache
 type BlobInfo struct {
-	SchemaVersion int
+	SchemaVersion int `json:",omitempty"`
 
 	// Layer information
 	Digest        string   `json:",omitempty"`
@@ -111,11 +135,14 @@ type BlobInfo struct {
 
 	// Analysis result
 	OS                OS                 `json:",omitempty"`
+	Users             []User             `json:",omitempty"`
+	Groups            []Group            `json:",omitempty"`
 	Repository        *Repository        `json:",omitempty"`
 	PackageInfos      []PackageInfo      `json:",omitempty"`
 	Applications      []Application      `json:",omitempty"`
 	Misconfigurations []Misconfiguration `json:",omitempty"`
 	Secrets           []Secret           `json:",omitempty"`
+	WeakPasswords     []WeakPassword     `json:",omitempty"`
 	Licenses          []LicenseFile      `json:",omitempty"`
 
 	// Red Hat distributions have build info per layer.
@@ -136,7 +163,10 @@ type ArtifactDetail struct {
 	Applications      []Application      `json:",omitempty"`
 	Misconfigurations []Misconfiguration `json:",omitempty"`
 	Secrets           []Secret           `json:",omitempty"`
+	WeakPasswords     []WeakPassword     `json:",omitempty"`
 	Licenses          []LicenseFile      `json:",omitempty"`
+	Users             []User             `json:",omitempty"`
+	Groups            []Group            `json:",omitempty"`
 
 	// ImageConfig has information from container image config
 	ImageConfig ImageConfigDetail
@@ -156,6 +186,9 @@ type ImageConfigDetail struct {
 
 	// Secret holds secrets in container image config
 	Secret *Secret `json:",omitempty"`
+
+	// WeakPasswords holds weak passwords in container image config
+	WeakPasswords []WeakPassword
 }
 
 // ToBlobInfo is used to store a merged layer in cache.
@@ -181,8 +214,8 @@ func (a *ArtifactDetail) ToBlobInfo() BlobInfo {
 // CustomResource holds the analysis result from a custom analyzer.
 // It is for extensibility and not used in OSS.
 type CustomResource struct {
-	Type     string
-	FilePath string
-	Layer    Layer
-	Data     any
+	Type     string      `json:",omitempty"`
+	FilePath string      `json:",omitempty"`
+	Layer    Layer       `json:",omitempty"`
+	Data     any		 `json:",omitempty"`
 }

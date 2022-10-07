@@ -54,6 +54,10 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) (Packages, error) {
 	var pkgs ftypes.Packages
 	for _, entry := range env.Entries {
 		for _, dep := range entry.Dependencies {
+			if dep.Value == "" {
+				continue
+			}
+
 			pkg := p.toPackage(dep)
 			// Skip empty pkgs
 			if pkg.Name == "" {
@@ -101,6 +105,10 @@ func (p *Parser) toPackage(dep Dependency) ftypes.Package {
 func (*Parser) parseDependency(line string) (string, string) {
 	line = strings.NewReplacer(">", " >", "<", " <", "=", " ").Replace(line)
 	parts := strings.Fields(line)
+	if len(parts) == 0 {
+		return "", ""
+	}
+
 	name := parts[0]
 	if len(parts) == 1 {
 		return name, ""

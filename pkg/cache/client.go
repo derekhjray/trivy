@@ -19,6 +19,7 @@ const (
 type Type string
 
 type Options struct {
+	Cache       Cache
 	Backend     string
 	CacheDir    string
 	RedisCACert string
@@ -46,6 +47,11 @@ func NewType(backend string) Type {
 // New returns a new cache client
 func New(opts Options) (Cache, func(), error) {
 	cleanup := func() {} // To avoid panic
+
+	// Using customized cache client
+	if opts.Cache != nil {
+		return opts.Cache, cleanup, nil
+	}
 
 	var cache Cache
 	t := NewType(opts.Backend)

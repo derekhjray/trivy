@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"gitee.com/anesec/mobius/directio"
 	"os"
 
 	"github.com/docker/docker/client"
@@ -51,7 +52,7 @@ func DockerImage(ref name.Reference, host string) (Image, func(), error) {
 		return nil, cleanup, xerrors.Errorf("unable to get history (%s): %w", imageID, err)
 	}
 
-	f, err := os.CreateTemp("", "fanal-*")
+	f, err := directio.CreateTemp("", "fanal-*")
 	if err != nil {
 		return nil, cleanup, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

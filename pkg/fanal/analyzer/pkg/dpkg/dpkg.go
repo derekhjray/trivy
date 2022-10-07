@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	debVersion "github.com/knqyf263/go-deb-version"
@@ -228,12 +229,19 @@ func (a dpkgAnalyzer) parseDpkgPkg(header textproto.MIMEHeader) *types.Package {
 		return nil
 	}
 
+	var size int64
+	if n, err := strconv.Atoi(header.Get("Installed-Size")); err == nil {
+		size = int64(n)
+	}
+
 	pkg := &types.Package{
 		Name:       header.Get("Package"),
 		Version:    header.Get("Version"),                 // Will be parsed later
 		DependsOn:  a.parseDepends(header.Get("Depends")), // Will be updated later
 		Maintainer: header.Get("Maintainer"),
 		Arch:       header.Get("Architecture"),
+		Type:       string(analyzer.DebPkg),
+		Size:       size,
 	}
 	if pkg.Name == "" || pkg.Version == "" {
 		return nil

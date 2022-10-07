@@ -29,6 +29,10 @@ type unpackagedHook struct {
 }
 
 func NewUnpackagedHandler(opt artifact.Option) (handler.PostHandler, error) {
+	if opt.RekorURL == "" {
+		return nil, nil
+	}
+
 	c, err := sbomatt.NewRekor(opt.RekorURL)
 	if err != nil {
 		return nil, xerrors.Errorf("rekor client error: %w", err)

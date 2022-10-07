@@ -45,12 +45,13 @@ type Format string
 
 const (
 	ClassUnknown     ResultClass = "unknown"
-	ClassOSPkg       ResultClass = "os-pkgs"      // For detected packages and vulnerabilities in OS packages
-	ClassLangPkg     ResultClass = "lang-pkgs"    // For detected packages and vulnerabilities in language-specific packages
-	ClassConfig      ResultClass = "config"       // For detected misconfigurations
-	ClassSecret      ResultClass = "secret"       // For detected secrets
-	ClassLicense     ResultClass = "license"      // For detected package licenses
-	ClassLicenseFile ResultClass = "license-file" // For detected licenses in files
+	ClassOSPkg       ResultClass = "os-pkgs"        // For detected packages and vulnerabilities in OS packages
+	ClassLangPkg     ResultClass = "lang-pkgs"      // For detected packages and vulnerabilities in language-specific packages
+	ClassConfig      ResultClass = "config"         // For detected misconfigurations
+	ClassSecret      ResultClass = "secret"         // For detected secrets
+	ClassLicense     ResultClass = "license"        // For detected package licenses
+	ClassWeakPass    ResultClass = "weak-passwords" // For detected weak passwords
+	ClassLicenseFile ResultClass = "license-file"   // For detected licenses in files
 	ClassCustom      ResultClass = "custom"
 
 	ComplianceK8sNsa10           = Compliance("k8s-nsa-1.0")
@@ -115,6 +116,8 @@ type Result struct {
 	MisconfSummary    *MisconfSummary            `json:"MisconfSummary,omitempty"`
 	Misconfigurations []DetectedMisconfiguration `json:"Misconfigurations,omitempty"`
 	Secrets           []DetectedSecret           `json:"Secrets,omitempty"`
+	WeakPasswords     []DetectedWeakPassword     `json:"WeakPasswords,omitempty"`
+	FileInfo          *ftypes.FileInfo           `json:"FileInfo,omitempty"`
 	Licenses          []DetectedLicense          `json:"Licenses,omitempty"`
 	CustomResources   []ftypes.CustomResource    `json:"CustomResources,omitempty"`
 
@@ -126,7 +129,7 @@ type Result struct {
 
 func (r *Result) IsEmpty() bool {
 	return len(r.Packages) == 0 && len(r.Vulnerabilities) == 0 && len(r.Misconfigurations) == 0 &&
-		len(r.Secrets) == 0 && len(r.Licenses) == 0 && len(r.CustomResources) == 0 && len(r.ModifiedFindings) == 0
+		len(r.Secrets) == 0 && len(r.Licenses) == 0 && len(r.CustomResources) == 0 && len(r.ModifiedFindings) == 0 && len(r.WeakPasswords) == 0
 }
 
 type MisconfSummary struct {
@@ -153,6 +156,9 @@ func (results Results) Failed() bool {
 			return true
 		}
 		if len(r.Licenses) > 0 {
+			return true
+		}
+		if len(r.WeakPasswords) > 0 {
 			return true
 		}
 	}

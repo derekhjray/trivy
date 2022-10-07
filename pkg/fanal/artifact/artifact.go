@@ -29,6 +29,7 @@ type Option struct {
 	AWSEndpoint       string
 	FileChecksum      bool // For SPDX
 	DetectionPriority types.DetectionPriority
+	LargeFileLimit    int
 
 	// Git repositories
 	RepoBranch string
@@ -41,6 +42,7 @@ type Option struct {
 	MisconfScannerOption misconf.ScannerOption
 	SecretScannerOption  analyzer.SecretScannerOption
 	LicenseScannerOption analyzer.LicenseScannerOption
+	WeakPasswordOption   analyzer.WeakPasswordOption
 
 	WalkerOption walker.Option
 }
@@ -55,6 +57,8 @@ func (o *Option) AnalyzerOptions() analyzer.AnalyzerOptions {
 		MisconfScannerOption: o.MisconfScannerOption,
 		SecretScannerOption:  o.SecretScannerOption,
 		LicenseScannerOption: o.LicenseScannerOption,
+		WeakPasswordOption:   o.WeakPasswordOption,
+		LargeFileLimit:       o.LargeFileLimit,
 	}
 }
 

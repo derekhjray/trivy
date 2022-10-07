@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	classifier "github.com/google/licenseclassifier/v2"
-	"github.com/google/licenseclassifier/v2/assets"
 	"golang.org/x/xerrors"
 
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
@@ -26,7 +25,7 @@ func initGoogleClassifier() error {
 	var err error
 	classifierOnce.Do(func() {
 		log.Debug("Loading the default license classifier...")
-		cf, err = assets.DefaultClassifier()
+		cf = classifier.NewClassifier(.8)
 	})
 	return err
 }

@@ -2,7 +2,7 @@ package analyzer
 
 import (
 	"errors"
-	"io"
+	"gitee.com/anesec/mobius/directio"
 	"io/fs"
 	"os"
 	"path"
@@ -35,7 +35,7 @@ func NewCompositeFS() (*CompositeFS, error) {
 func (c *CompositeFS) CopyFileToTemp(opener Opener, info os.FileInfo) (string, error) {
 	// Create a temporary file to which the file in the layer will be copied
 	// so that all the files will not be loaded into memory
-	f, err := os.CreateTemp(c.dir, "file-*")
+	f, err := directio.CreateTemp(c.dir, "file-*")
 	if err != nil {
 		return "", xerrors.Errorf("create temp error: %w", err)
 	}
@@ -49,7 +49,7 @@ func (c *CompositeFS) CopyFileToTemp(opener Opener, info os.FileInfo) (string, e
 	defer r.Close()
 
 	// Copy file content into the temporary file
-	if _, err = io.Copy(f, r); err != nil {
+	if _, err = directio.Copy(f, r); err != nil {
 		return "", xerrors.Errorf("copy error: %w", err)
 	}
 

@@ -13,7 +13,7 @@ import (
 const (
 	analyzerType = analyzer.TypeHelm
 	version      = 1
-	maxTarSize   = 209_715_200 // 200MB
+	maxTarSize   = 64 << 20 // 64MiB
 )
 
 var acceptedExts = []string{".tpl", ".json", ".yml", ".yaml", ".tar", ".tgz", ".tar.gz"}

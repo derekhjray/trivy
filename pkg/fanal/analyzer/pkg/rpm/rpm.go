@@ -176,6 +176,8 @@ func (a rpmPkgAnalyzer) listPkgs(ctx context.Context, db RPMDB) (types.Packages,
 			Licenses:        licenses,
 			DependsOn:       pkg.Requires, // Will be replaced with package IDs
 			Maintainer:      pkg.Vendor,
+			Size:            int64(pkg.Size),
+			Type:            string(analyzer.RpmPkg),
 			Digest:          d,
 			InstalledFiles:  files,
 		}

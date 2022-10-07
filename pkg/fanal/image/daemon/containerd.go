@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gitee.com/anesec/mobius/directio"
 	"io"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -127,7 +130,7 @@ func ContainerdImage(ctx context.Context, imageName string, opts types.ImageOpti
 
 	img := imgs[0]
 
-	f, err := os.CreateTemp("", "fanal-containerd-*")
+	f, err := directio.CreateTemp("", "fanal-containerd-*")
 	if err != nil {
 		return nil, cleanup, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}
@@ -169,13 +172,17 @@ func parseReference(imageName string) (refdocker.Reference, []string, error) {
 		return ref, []string{
 			fmt.Sprintf(`name~="^%s(:|@).*",target.digest==%q`, n.Name(), dgst),
 			fmt.Sprintf(`name~="^%s(:|@).*",target.digest==%q`, refdocker.FamiliarName(n), dgst),
+			fmt.Sprintf(`name~="%s"`, dgst),
 		}, nil
 	}
 
 	// digested, but not named. i.e. a plain digest
 	// example: sha256:41adb3ef...
 	if isDigested {
-		return ref, []string{fmt.Sprintf(`target.digest==%q`, d.Digest())}, nil
+		return ref, []string{
+			fmt.Sprintf(`target.digest==%q`, d.Digest()),
+			fmt.Sprintf(`name~="%s"`, d.Digest()),
+		}, nil
 	}
 
 	// a name plus a tag
@@ -210,6 +217,82 @@ func readImageConfig(ctx context.Context, img containerd.Image) (ocispec.Image, 
 	return config, configDesc, nil
 }
 
+func parseHealthConfig(healthConfig string) *container.HealthConfig {
+	if healthConfig == "" {
+		return nil
+	}
+
+	re := regexp.MustCompile(`[&{}'"\\]`)
+	healthConfig = re.ReplaceAllString(healthConfig, ``)
+	healthConfig = strings.ReplaceAll(healthConfig, "CMD-SHELL", "CMD")
+
+	lastBracketIndex := strings.LastIndexByte(healthConfig, ']')
+	if lastBracketIndex == -1 {
+		return nil
+	}
+
+	config := &container.HealthConfig{}
+	tests := strings.Split(healthConfig[:lastBracketIndex], "CMD")
+	config.Test = make([]string, 0, len(tests))
+	for _, test := range tests[1:] {
+		test = strings.TrimSpace(test)
+		if len(test) == 0 {
+			continue
+		}
+
+		config.Test = append(config.Test, "CMD "+strings.TrimFunc(test, func(r rune) bool {
+			return r == '[' || r == ']'
+		}))
+	}
+
+	if len(config.Test) == 0 {
+		return nil
+	}
+
+	fields := strings.Fields(healthConfig[lastBracketIndex+1:])
+	if len(fields) < 4 {
+		return nil
+	}
+
+	var err error
+	if config.Interval, err = time.ParseDuration(fields[0]); err != nil {
+		return nil
+	}
+
+	if config.Timeout, err = time.ParseDuration(fields[1]); err != nil {
+		return nil
+	}
+
+	if config.StartPeriod, err = time.ParseDuration(fields[2]); err != nil {
+		return nil
+	}
+
+	var retries = fields[3]
+	if len(fields) == 5 {
+		retries = fields[4]
+		if config.StartInterval, err = time.ParseDuration(fields[3]); err != nil {
+			return nil
+		}
+	}
+
+	base := 10
+	if strings.HasPrefix(retries, "x") {
+		base = 8
+		retries = retries[1:]
+	} else if strings.HasPrefix(retries, "0x") {
+		base = 16
+		retries = retries[2:]
+	}
+
+	var n int64
+	if n, err = strconv.ParseInt(retries, base, 64); err != nil {
+		return nil
+	}
+	config.Retries = int(n)
+
+	return config
+}
+
 // ported from https://github.com/containerd/nerdctl/blob/d110fea18018f13c3f798fa6565e482f3ff03591/pkg/inspecttypes/dockercompat/dockercompat.go#L279-L321
 func inspect(ctx context.Context, img containerd.Image, ref refdocker.Reference) (api.ImageInspect, []v1.History, refdocker.Reference, error) {
 	if _, ok := ref.(refdocker.Digested); ok {
@@ -236,11 +319,22 @@ func inspect(ctx context.Context, img containerd.Image, ref refdocker.Reference)
 		lastHistory = imgConfig.History[len(imgConfig.History)-1]
 	}
 
-	var history []v1.History
+	var healthcheck string
+	history := make([]v1.History, 0, len(imgConfig.History))
 	for _, h := range imgConfig.History {
+		var created v1.Time
+		if h.Created != nil {
+			created = v1.Time{Time: *h.Created}
+		}
+
+		if strings.Contains(h.CreatedBy, "HEALTHCHECK") {
+			// Using last healthcheck instruction
+			healthcheck = h.CreatedBy
+		}
+
 		history = append(history, v1.History{
 			Author:     h.Author,
-			Created:    v1.Time{Time: *h.Created},
+			Created:    created,
 			CreatedBy:  h.CreatedBy,
 			Comment:    h.Comment,
 			EmptyLayer: h.EmptyLayer,
@@ -273,6 +367,7 @@ func inspect(ctx context.Context, img containerd.Image, ref refdocker.Reference)
 			WorkingDir:   imgConfig.Config.WorkingDir,
 			Entrypoint:   imgConfig.Config.Entrypoint,
 			Labels:       imgConfig.Config.Labels,
+			Healthcheck:  parseHealthConfig(healthcheck),
 		},
 		Architecture: imgConfig.Architecture,
 		Os:           imgConfig.OS,

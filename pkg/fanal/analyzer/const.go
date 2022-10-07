@@ -108,6 +108,8 @@ const (
 	TypeExecutable Type = "executable"
 	TypeSBOM       Type = "sbom"
 
+	TypeWeakPassword Type = "weakpass"
+
 	// ============
 	// Image Config
 	// ============
@@ -252,4 +254,23 @@ var (
 		TypeYAML,
 		TypeJSON,
 	}
+)
+
+const (
+	UnknownPkg     Type = "unknown"
+	ApkPkg         Type = "apk"
+	RubyPkg        Type = "ruby"
+	DebPkg         Type = "deb"
+	RpmPkg         Type = "rpm"
+	NpmPkg         Type = "npm"
+	PythonPkg      Type = "python"
+	PhpComposerPkg Type = "php-composer"
+	JavaPkg        Type = "jar"
+	GoModulePkg    Type = "go-module"
+	RustPkg        Type = "rust-crate"
+	SwiftPkg       Type = "swift"
+	DartPkg        Type = "dart"
+	CppPkg         Type = "c/c++"
+	DotnetPkg      Type = ".net"
+	ErlangPkg      Type = "erlang"
 )

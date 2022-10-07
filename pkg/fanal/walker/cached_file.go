@@ -2,6 +2,8 @@ package walker
 
 import (
 	"bytes"
+	"gitee.com/anesec/mobius/directio"
+	"github.com/samber/lo"
 	"io"
 	"os"
 	"sync"
@@ -19,14 +21,17 @@ type cachedFile struct {
 	size   int64
 	reader io.Reader
 
+	threshold int64 //　Files larger than this threshold are written to file without being read into memory.
+
 	content  []byte // It will be populated if this file is small
 	filePath string // It will be populated if this file is large
 }
 
-func newCachedFile(size int64, r io.Reader) *cachedFile {
+func newCachedFile(size int64, r io.Reader, threshold int64) *cachedFile {
 	return &cachedFile{
-		size:   size,
-		reader: r,
+		size:      size,
+		reader:    r,
+		threshold: lo.Ternary(threshold > 0, threshold, defaultSizeThreshold),
 	}
 }
 
@@ -36,19 +41,21 @@ func newCachedFile(size int64, r io.Reader) *cachedFile {
 func (o *cachedFile) Open() (xio.ReadSeekCloserAt, error) {
 	o.once.Do(func() {
 		// When the file is large, it will be written down to a temp file.
-		if o.size >= defaultSizeThreshold {
-			f, err := os.CreateTemp("", "fanal-*")
+		if o.size >= o.threshold {
+			dw, err := directio.CreateTemp("", "fanal-*")
 			if err != nil {
 				o.err = xerrors.Errorf("failed to create the temp file: %w", err)
 				return
 			}
 
-			if _, err = io.Copy(f, o.reader); err != nil {
+			defer dw.Close()
+
+			if _, err = directio.Copy(dw, o.reader); err != nil {
 				o.err = xerrors.Errorf("failed to copy: %w", err)
 				return
 			}
 
-			o.filePath = f.Name()
+			o.filePath = dw.Name()
 		} else {
 			b, err := io.ReadAll(o.reader)
 			if err != nil {
@@ -67,7 +74,7 @@ func (o *cachedFile) Open() (xio.ReadSeekCloserAt, error) {
 
 func (o *cachedFile) open() (xio.ReadSeekCloserAt, error) {
 	if o.filePath != "" {
-		f, err := os.Open(o.filePath)
+		f, err := directio.NewReader(o.filePath)
 		if err != nil {
 			return nil, xerrors.Errorf("failed to open the temp file: %w", err)
 		}
@@ -78,5 +85,9 @@ func (o *cachedFile) open() (xio.ReadSeekCloserAt, error) {
 }
 
 func (o *cachedFile) Clean() error {
-	return os.Remove(o.filePath)
+	if o.filePath != "" {
+		return os.Remove(o.filePath)
+	}
+
+	return nil
 }

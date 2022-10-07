@@ -202,6 +202,9 @@ type Package struct {
 
 	Layer Layer `json:",omitempty"`
 
+	Size int64  `json:",omitempty"` // package installed size
+	Type string `json:",omitempty"` // package type
+
 	// Each package metadata have the file path, while the package from lock files does not have.
 	FilePath string `json:",omitempty"`
 

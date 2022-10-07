@@ -243,6 +243,10 @@ func (s *Scanner) scanK8sVulns(ctx context.Context, artifactsData []*artifacts.A
 				return nil, err
 			}
 
+			if strings.HasPrefix(comp.Name, "k8s.io/") && comp.Version == "" {
+				comp.Version = s.opts.K8sVersion
+			}
+
 			lang := k8sNamespace(comp.Version, nodeName)
 			results, _, err := k8sScanner.Scan(ctx, types.ScanTarget{
 				Applications: []ftypes.Application{
@@ -591,6 +595,8 @@ func runtimeNameVersion(name string) (string, string) {
 		name = "github.com/containerd/containerd"
 	case "cri-dockerd":
 		name = "github.com/Mirantis/cri-dockerd"
+	case "docker":
+		name = "github.com/docker/docker"
 	}
 	return name, ver
 }

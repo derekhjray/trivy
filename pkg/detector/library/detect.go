@@ -39,6 +39,7 @@ func detect(ctx context.Context, driver Driver, pkgs []ftypes.Package) ([]types.
 		}
 
 		for i := range vulns {
+			vulns[i].PkgType = pkg.Type
 			vulns[i].Layer = pkg.Layer
 			vulns[i].PkgPath = pkg.FilePath
 			vulns[i].PkgIdentifier = pkg.Identifier

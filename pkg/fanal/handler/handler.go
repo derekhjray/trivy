@@ -50,6 +50,10 @@ func NewManager(artifactOpt artifact.Option) (Manager, error) {
 			return Manager{}, xerrors.Errorf("post handler %s initialize error: %w", t, err)
 		}
 
+		if handler == nil {
+			continue
+		}
+
 		m.postHandlers = append(m.postHandlers, handler)
 	}
 

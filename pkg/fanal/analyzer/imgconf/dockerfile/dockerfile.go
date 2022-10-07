@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.org/x/xerrors"
@@ -49,33 +51,98 @@ func (a *historyAnalyzer) Analyze(ctx context.Context, input analyzer.ConfigAnal
 	if input.Config == nil {
 		return nil, nil
 	}
+
 	dockerfile := new(bytes.Buffer)
 	var userFound bool
+	argRe := regexp.MustCompile(`^\|(\d+)\s+`)
 	baseLayerIndex := image.GuessBaseImageIndex(input.Config.History)
 	for i := baseLayerIndex + 1; i < len(input.Config.History); i++ {
 		h := input.Config.History[i]
-		var createdBy string
-		switch {
-		case strings.HasPrefix(h.CreatedBy, "/bin/sh -c #(nop)"):
+		var createdBy = strings.TrimSpace(strings.TrimSuffix(h.CreatedBy, "# buildkit"))
+
+		if matches := argRe.FindStringSubmatch(createdBy); len(matches) == 2 {
+			processed := false
+			if argN, err := strconv.Atoi(matches[1]); err == nil {
+				if parts := strings.SplitN(createdBy, " ", argN+2); len(parts) == argN+2 {
+					createdBy = parts[argN+1]
+					processed = true
+				}
+			}
+
+			if !processed {
+				if index := strings.Index(createdBy, "/bin/sh -c"); index > 0 {
+					createdBy = createdBy[index:]
+				}
+			}
+		}
+
+		if strings.HasPrefix(createdBy, "/bin/sh -c #(nop)") {
 			// Instruction other than RUN
-			createdBy = strings.TrimPrefix(h.CreatedBy, "/bin/sh -c #(nop)")
-		case strings.HasPrefix(h.CreatedBy, "/bin/sh -c"):
+			createdBy = strings.TrimPrefix(createdBy, "/bin/sh -c #(nop)")
+		}
+
+		if strings.HasPrefix(createdBy, "/bin/sh -c") {
 			// RUN instruction
-			createdBy = strings.ReplaceAll(h.CreatedBy, "/bin/sh -c", "RUN")
-		case strings.HasSuffix(h.CreatedBy, "# buildkit"):
+			createdBy = strings.ReplaceAll(createdBy, "/bin/sh -c", "RUN")
+		}
+
+		if strings.HasPrefix(createdBy, "RUN /bin/sh -c") {
 			// buildkit instructions
 			// COPY ./foo /foo # buildkit
 			// ADD ./foo.txt /foo.txt # buildkit
 			// RUN /bin/sh -c ls -hl /foo # buildkit
-			createdBy = strings.TrimSuffix(h.CreatedBy, "# buildkit")
-			if strings.HasPrefix(h.CreatedBy, "RUN /bin/sh -c") {
-				createdBy = strings.ReplaceAll(createdBy, "RUN /bin/sh -c", "RUN")
-			}
-		case strings.HasPrefix(h.CreatedBy, "USER"):
+			createdBy = strings.ReplaceAll(createdBy, "RUN /bin/sh -c", "RUN")
+		}
+
+		createdBy = strings.TrimSpace(createdBy)
+
+		switch {
+		case strings.HasPrefix(createdBy, "USER"):
 			// USER instruction
-			createdBy = h.CreatedBy
 			userFound = true
-		case strings.HasPrefix(h.CreatedBy, "HEALTHCHECK"):
+		case strings.HasPrefix(createdBy, "LABEL") || strings.HasPrefix(createdBy, "ENV"):
+			parts := strings.Split(createdBy, "=")
+			buf := bytes.NewBuffer(make([]byte, 0, len(createdBy)+8))
+			for j := 0; j < len(parts); j++ {
+				if j == 0 {
+					buf.WriteString(parts[j])
+					continue
+				}
+
+				buf.WriteByte('=')
+
+				spaces := strings.Count(parts[j], " ")
+				if j+1 == len(parts) {
+					if spaces > 0 {
+						buf.WriteByte('"')
+						buf.WriteString(parts[j])
+						buf.WriteByte('"')
+					} else {
+						buf.WriteString(parts[j])
+					}
+					continue
+				}
+
+				if spaces > 1 {
+					if index := strings.LastIndex(parts[j], " "); index > 0 {
+						buf.WriteByte('"')
+						buf.WriteString(parts[j][:index])
+						buf.WriteByte('"')
+						buf.WriteString(parts[j][index:])
+						continue
+					}
+				}
+
+				buf.WriteString(parts[j])
+			}
+
+			createdBy = buf.String()
+		case strings.HasPrefix(createdBy, "HEALTHCHECK"):
+			// Healthcheck field may nil on containerd runtime
+			if input.Config.Config.Healthcheck == nil {
+				continue
+			}
+
 			// HEALTHCHECK instruction
 			var interval, timeout, startPeriod, retries, command string
 			if input.Config.Config.Healthcheck.Interval != 0 {
@@ -85,7 +152,7 @@ func (a *historyAnalyzer) Analyze(ctx context.Context, input analyzer.ConfigAnal
 				timeout = fmt.Sprintf("--timeout=%s ", input.Config.Config.Healthcheck.Timeout)
 			}
 			if input.Config.Config.Healthcheck.StartPeriod != 0 {
-				startPeriod = fmt.Sprintf("--startPeriod=%s ", input.Config.Config.Healthcheck.StartPeriod)
+				startPeriod = fmt.Sprintf("--start-period=%s ", input.Config.Config.Healthcheck.StartPeriod)
 			}
 			if input.Config.Config.Healthcheck.Retries != 0 {
 				retries = fmt.Sprintf("--retries=%d ", input.Config.Config.Healthcheck.Retries)
@@ -94,6 +161,7 @@ func (a *historyAnalyzer) Analyze(ctx context.Context, input analyzer.ConfigAnal
 			command = strings.ReplaceAll(command, "CMD-SHELL", "CMD")
 			createdBy = fmt.Sprintf("HEALTHCHECK %s%s%s%s%s", interval, timeout, startPeriod, retries, command)
 		}
+
 		dockerfile.WriteString(strings.TrimSpace(createdBy) + "\n")
 	}
 

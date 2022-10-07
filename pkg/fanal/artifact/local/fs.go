@@ -82,6 +82,7 @@ func (a Artifact) Inspect(ctx context.Context) (artifact.Reference, error) {
 	if err != nil {
 		return artifact.Reference{}, xerrors.Errorf("failed to prepare filesystem for post analysis: %w", err)
 	}
+	defer composite.Cleanup()
 
 	err = a.walker.Walk(a.rootPath, a.artifactOption.WalkerOption, func(filePath string, info os.FileInfo, opener analyzer.Opener) error {
 		dir := a.rootPath
@@ -127,11 +128,14 @@ func (a Artifact) Inspect(ctx context.Context) (artifact.Reference, error) {
 	blobInfo := types.BlobInfo{
 		SchemaVersion:     types.BlobJSONSchemaVersion,
 		OS:                result.OS,
+		Users:             result.Users,
+		Groups:            result.Groups,
 		Repository:        result.Repository,
 		PackageInfos:      result.PackageInfos,
 		Applications:      result.Applications,
 		Misconfigurations: result.Misconfigurations,
 		Secrets:           result.Secrets,
+		WeakPasswords:     result.WeakPasswords,
 		Licenses:          result.Licenses,
 		CustomResources:   result.CustomResources,
 	}

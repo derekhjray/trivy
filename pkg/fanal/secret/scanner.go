@@ -1,15 +1,19 @@
 package secret
 
 import (
+	"archive/tar"
 	"bytes"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"os"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/samber/lo"
 	"golang.org/x/xerrors"
@@ -77,12 +81,18 @@ func (r *Regexp) UnmarshalYAML(value *yaml.Node) error {
 	if err := value.Decode(&v); err != nil {
 		return err
 	}
-	regex, err := regexp.Compile(v)
-	if err != nil {
-		return xerrors.Errorf("regexp compile error: %w", err)
+
+	if v != "" {
+		regex, err := regexp.Compile(v)
+		if err != nil {
+			return xerrors.Errorf("regexp compile error: %w", err)
+		}
+
+		r.Regexp = regex
+	} else {
+		r.Regexp = nil
 	}
 
-	r.Regexp = regex
 	return nil
 }
 
@@ -100,8 +110,8 @@ type Rule struct {
 }
 
 func (s *Scanner) FindLocations(r Rule, content []byte) []Location {
-	if r.Regex == nil {
-		return nil
+	if r.Regex == nil || r.Regex.Regexp == nil {
+		return []Location{{}}
 	}
 
 	if r.SecretGroupName != "" {
@@ -126,6 +136,10 @@ func (s *Scanner) FindLocations(r Rule, content []byte) []Location {
 }
 
 func (s *Scanner) FindSubmatchLocations(r Rule, content []byte) []Location {
+	if r.Regex == nil || r.Regex.Regexp == nil {
+		return []Location{{}}
+	}
+
 	var submatchLocations []Location
 	matchsIndices := r.Regex.FindAllSubmatchIndex(content, -1)
 	for _, matchIndices := range matchsIndices {
@@ -168,7 +182,7 @@ func (r *Rule) getMatchSubgroupsLocations(matchLocs []int) []Location {
 }
 
 func (r *Rule) MatchPath(path string) bool {
-	return r.Path == nil || r.Path.MatchString(path)
+	return r.Path == nil || r.Path.Regexp == nil || r.Path.MatchString(path)
 }
 
 func (r *Rule) MatchKeywords(content []byte) bool {
@@ -365,6 +379,7 @@ func NewScanner(config *Config) Scanner {
 
 type ScanArgs struct {
 	FilePath string
+	FileInfo os.FileInfo
 	Content  []byte
 	Binary   bool
 }
@@ -456,10 +471,58 @@ func (s *Scanner) Scan(args ScanArgs) types.Secret {
 		return findings[i].Match < findings[j].Match
 	})
 
+	info := parseFileInfo(args.FileInfo)
+	info.MD5 = fmt.Sprintf("%02x", md5.Sum(args.Content))
+	if info.Name == "" {
+		// image config.json, embedded in image, cannot retrieve other informations
+		info.Name = args.FilePath
+		info.Size = int64(len(args.Content))
+	}
+
 	return types.Secret{
 		FilePath: args.FilePath,
 		Findings: findings,
+		FileInfo: info,
 	}
+}
+
+func parseFileInfo(finfo os.FileInfo) *types.FileInfo {
+	if finfo == nil {
+		return &types.FileInfo{}
+	}
+
+	info := &types.FileInfo{
+		Name:       finfo.Name(),
+		Size:       finfo.Size(),
+		ModifyTime: finfo.ModTime().UnixNano(),
+		Permission: uint32(finfo.Mode().Perm()),
+	}
+
+	if header, ok := finfo.Sys().(*tar.Header); ok {
+		info.Mode = os.FileMode(header.Mode).String()
+		info.User = strconv.Itoa(header.Uid)
+		info.Group = strconv.Itoa(header.Gid)
+		if info.ModifyTime <= 0 {
+			info.ModifyTime = header.ModTime.UnixNano()
+		}
+		info.AccessTime = header.AccessTime.UnixNano()
+		info.CreateTime = info.ModifyTime
+	} else if stat, ok := finfo.Sys().(*syscall.Stat_t); ok {
+		info.Mode = os.FileMode(stat.Mode).String()
+		info.User = strconv.Itoa(int(stat.Uid))
+		info.Group = strconv.Itoa(int(stat.Gid))
+		if info.ModifyTime <= 0 {
+			info.ModifyTime = stat.Mtim.Nano()
+		}
+		info.AccessTime = stat.Atim.Nano()
+		info.CreateTime = info.ModifyTime
+	}
+
+	if info.AccessTime <= 0 {
+		info.AccessTime = info.ModifyTime
+	}
+
+	return info
 }
 
 func censorLocation(loc Location, input []byte) []byte {
@@ -474,6 +537,12 @@ func censorLocation(loc Location, input []byte) []byte {
 
 func toFinding(rule Rule, loc Location, content []byte) types.SecretFinding {
 	startLine, endLine, code, matchLine := findLocation(loc.Start, loc.End, content)
+	if rule.Regex == nil && loc.Start == 0 && loc.End == 0 {
+		startLine = 0
+		endLine = 0
+		code = types.Code{}
+		matchLine = ""
+	}
 
 	return types.SecretFinding{
 		RuleID:    rule.ID,

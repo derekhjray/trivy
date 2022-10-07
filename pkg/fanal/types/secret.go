@@ -3,18 +3,19 @@ package types
 type SecretRuleCategory string
 
 type Secret struct {
-	FilePath string
-	Findings []SecretFinding
+	FilePath string          `json:",omitempty"`
+	FileInfo *FileInfo       `json:",omitempty"`
+	Findings []SecretFinding `json:",omitempty"`
 }
 
 type SecretFinding struct {
-	RuleID    string
-	Category  SecretRuleCategory
-	Severity  string
-	Title     string
-	StartLine int
-	EndLine   int
-	Code      Code
-	Match     string
-	Layer     Layer `json:",omitempty"`
+	RuleID    string             `json:",omitempty"`
+	Category  SecretRuleCategory `json:",omitempty"`
+	Severity  string             `json:",omitempty"`
+	Title     string             `json:",omitempty"`
+	StartLine int                `json:",omitempty"`
+	EndLine   int                `json:",omitempty"`
+	Code      Code               `json:",omitempty"`
+	Match     string             `json:",omitempty"`
+	Layer     Layer              `json:",omitempty"`
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -98,6 +99,7 @@ func (s Scanner) Scan(ctx context.Context, targetName, artifactKey string, blobK
 		Applications:      detail.Applications,
 		Misconfigurations: mergeMisconfigurations(targetName, detail),
 		Secrets:           mergeSecrets(targetName, detail),
+		WeakPasswords:     mergeWeakPasswords(targetName, detail),
 		Licenses:          detail.Licenses,
 		CustomResources:   detail.CustomResources,
 	}
@@ -123,10 +125,13 @@ func (s Scanner) ScanTarget(ctx context.Context, target types.ScanTarget, option
 	results = append(results, s.misconfsToResults(target.Misconfigurations, options)...)
 
 	// Store secrets
-	results = append(results, s.secretsToResults(target.Secrets, options)...)
+	results = append(results, s.secretsToResults(target.Secrets, target.Users, target.Groups, options)...)
 
 	// Scan licenses
 	results = append(results, s.scanLicenses(target, options)...)
+
+	// Scan weak passwords
+	results = append(results, s.weakPasswordsToResults(target.WeakPasswords, options)...)
 
 	// For WASM plugins and custom analyzers
 	if len(target.CustomResources) != 0 {
@@ -226,7 +231,29 @@ func (s Scanner) MisconfsToResults(misconfs []ftypes.Misconfiguration) types.Res
 	return results
 }
 
-func (s Scanner) secretsToResults(secrets []ftypes.Secret, options types.ScanOptions) types.Results {
+func (s Scanner) weakPasswordsToResults(weakpasses []ftypes.WeakPassword, options types.ScanOptions) types.Results {
+	if !options.Scanners.Enabled(types.WeakPasswordScanner) {
+		return nil
+	}
+
+	var results types.Results
+	if len(weakpasses) > 0 {
+		detected := make([]types.DetectedWeakPassword, len(weakpasses))
+		for index := range weakpasses {
+			detected[index] = types.DetectedWeakPassword{WeakPassword: weakpasses[index].WeakPassword, Layer: weakpasses[index].Layer}
+		}
+		results = append(results, types.Result{
+			Target:        weakpasses[0].Target,
+			Class:         types.ClassWeakPass,
+			Type:          ftypes.TargetType(weakpasses[0].Service),
+			WeakPasswords: detected,
+		})
+	}
+
+	return results
+}
+
+func (s Scanner) secretsToResults(secrets []ftypes.Secret, users []ftypes.User, groups []ftypes.Group, options types.ScanOptions) types.Results {
 	if !options.Scanners.Enabled(types.SecretScanner) {
 		return nil
 	}
@@ -235,12 +262,38 @@ func (s Scanner) secretsToResults(secrets []ftypes.Secret, options types.ScanOpt
 	for _, secret := range secrets {
 		log.Debug("Secret file", log.FilePath(secret.FilePath))
 
+		if secret.FileInfo != nil && (users != nil || groups != nil) {
+			var (
+				id  int
+				err error
+			)
+
+			if id, err = strconv.Atoi(secret.FileInfo.User); err == nil {
+				for index := range users {
+					if users[index].ID == id {
+						secret.FileInfo.User = users[index].Name
+						break
+					}
+				}
+			}
+
+			if id, err = strconv.Atoi(secret.FileInfo.Group); err == nil {
+				for index := range groups {
+					if groups[index].ID == id {
+						secret.FileInfo.Group = groups[index].Name
+						break
+					}
+				}
+			}
+		}
+
 		results = append(results, types.Result{
 			Target: secret.FilePath,
 			Class:  types.ClassSecret,
 			Secrets: lo.Map(secret.Findings, func(secret ftypes.SecretFinding, index int) types.DetectedSecret {
 				return types.DetectedSecret(secret)
 			}),
+			FileInfo: secret.FileInfo,
 		})
 	}
 	return results
@@ -487,4 +540,19 @@ func mergeSecrets(targetName string, detail ftypes.ArtifactDetail) []ftypes.Secr
 	secret := detail.ImageConfig.Secret
 	secret.FilePath = targetName // Set the target name to the file path as container image config is not a real file.
 	return append(detail.Secrets, *secret)
+}
+
+// mergeWeakPasswords merges weak passwords on container image config
+func mergeWeakPasswords(targetName string, detail ftypes.ArtifactDetail) []ftypes.WeakPassword {
+	if detail.ImageConfig.WeakPasswords == nil {
+		return detail.WeakPasswords
+	}
+
+	// Append weak passwords on container image config
+	for index := range detail.ImageConfig.WeakPasswords {
+		// Set the target name to the file path as container image config is not a real file.
+		detail.ImageConfig.WeakPasswords[index].Target = targetName
+	}
+
+	return append(detail.WeakPasswords, detail.ImageConfig.WeakPasswords...)
 }

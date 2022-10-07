@@ -56,6 +56,7 @@ func (s *Scanner) Detect(ctx context.Context, osVer string, _ *ftypes.Repository
 			vuln := types.DetectedVulnerability{
 				VulnerabilityID:  adv.VulnerabilityID,
 				PkgName:          pkg.Name,
+				PkgType:          pkg.Type,
 				InstalledVersion: utils.FormatVersion(pkg),
 				PkgIdentifier:    pkg.Identifier,
 				Layer:            pkg.Layer,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
@@ -20,11 +21,19 @@ const version = 1
 var requiredFiles = []string{
 	"etc/os-release",
 	"usr/lib/os-release",
+	"etc/passwd",
+	"etc/group",
 }
 
 type osReleaseAnalyzer struct{}
 
-func (a osReleaseAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInput) (*analyzer.AnalysisResult, error) {
+func (a osReleaseAnalyzer) Analyze(ctx context.Context, input analyzer.AnalysisInput) (*analyzer.AnalysisResult, error) {
+	if strings.Contains(input.FilePath, "etc/passwd") {
+		return a.analyseUsers(ctx, input)
+	} else if strings.Contains(input.FilePath, "etc/group") {
+		return a.analyseGroups(ctx, input)
+	}
+
 	var id, versionID string
 	scanner := bufio.NewScanner(input.Content)
 	for scanner.Scan() {
@@ -83,6 +92,71 @@ func (a osReleaseAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInp
 	}
 
 	return nil, nil
+}
+
+func (a osReleaseAnalyzer) analyseUsers(_ context.Context, input analyzer.AnalysisInput) (*analyzer.AnalysisResult, error) {
+	scanner := bufio.NewScanner(input.Content)
+	users := make([]types.User, 0, 16)
+	var (
+		uid, gid int
+		err      error
+	)
+
+	for scanner.Scan() {
+		fields := strings.FieldsFunc(scanner.Text(), func(r rune) bool {
+			return r == ':'
+		})
+
+		if len(fields) < 4 {
+			continue
+		}
+
+		if uid, err = strconv.Atoi(fields[2]); err != nil {
+			continue
+		}
+
+		if gid, err = strconv.Atoi(fields[3]); err != nil {
+			continue
+		}
+
+		users = append(users, types.User{ID: uid, GID: gid, Name: fields[0]})
+	}
+
+	if len(users) == 0 {
+		return nil, nil
+	}
+
+	return &analyzer.AnalysisResult{Users: users}, nil
+}
+
+func (a osReleaseAnalyzer) analyseGroups(_ context.Context, input analyzer.AnalysisInput) (*analyzer.AnalysisResult, error) {
+	scanner := bufio.NewScanner(input.Content)
+	groups := make([]types.Group, 0, 16)
+	var (
+		gid int
+		err error
+	)
+
+	for scanner.Scan() {
+		fields := strings.FieldsFunc(scanner.Text(), func(r rune) bool {
+			return r == ':'
+		})
+
+		if len(fields) < 3 {
+			continue
+		}
+
+		if gid, err = strconv.Atoi(fields[2]); err != nil {
+			continue
+		}
+		groups = append(groups, types.Group{ID: gid, Name: fields[0]})
+	}
+
+	if len(groups) == 0 {
+		return nil, nil
+	}
+
+	return &analyzer.AnalysisResult{Groups: groups}, nil
 }
 
 func (a osReleaseAnalyzer) Required(filePath string, _ os.FileInfo) bool {

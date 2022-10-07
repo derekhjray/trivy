@@ -2,6 +2,7 @@ package packagejson
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"regexp"
 
@@ -18,6 +19,7 @@ type packageJSON struct {
 	Name                 string            `json:"name"`
 	Version              string            `json:"version"`
 	License              any               `json:"license"`
+	Author               any               `json:"author"`
 	Dependencies         map[string]string `json:"dependencies"`
 	OptionalDependencies map[string]string `json:"optionalDependencies"`
 	DevDependencies      map[string]string `json:"devDependencies"`
@@ -57,10 +59,11 @@ func (p *Parser) Parse(r io.Reader) (Package, error) {
 
 	return Package{
 		Package: ftypes.Package{
-			ID:       id,
-			Name:     pkgJSON.Name,
-			Version:  pkgJSON.Version,
-			Licenses: parseLicense(pkgJSON.License),
+			ID:         id,
+			Name:       pkgJSON.Name,
+			Version:    pkgJSON.Version,
+			Licenses:   parseLicense(pkgJSON.License),
+			Maintainer: parseAuthor(pkgJSON.Author),
 		},
 		Dependencies:         pkgJSON.Dependencies,
 		OptionalDependencies: pkgJSON.OptionalDependencies,
@@ -84,6 +87,25 @@ func parseLicense(val any) []string {
 		}
 	}
 	return nil
+}
+
+func parseAuthor(val any) string {
+	switch v := val.(type) {
+	case string:
+		return v
+	case map[string]interface{}:
+		name, _ := v["name"].(string)
+		email, _ := v["email"].(string)
+		if name != "" {
+			if email != "" {
+				return fmt.Sprintf("%s <%s>", name, email)
+			}
+
+			return name
+		}
+	}
+
+	return ""
 }
 
 // parseWorkspaces returns slice of workspaces

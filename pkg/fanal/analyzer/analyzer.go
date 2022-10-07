@@ -3,9 +3,11 @@ package analyzer
 import (
 	"context"
 	"errors"
+	"github.com/sirupsen/logrus"
 	"io/fs"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
@@ -42,16 +44,25 @@ var (
 type AnalyzerOptions struct {
 	Group                Group
 	Parallel             int
+	LargeFileLimit       int
 	FilePatterns         []string
 	DisabledAnalyzers    []Type
 	DetectionPriority    types.DetectionPriority
 	MisconfScannerOption misconf.ScannerOption
 	SecretScannerOption  SecretScannerOption
 	LicenseScannerOption LicenseScannerOption
+	WeakPasswordOption   WeakPasswordOption
+}
+
+type WeakPasswordOption struct {
+	Scanner string
+	Configs []string
+	Policy  string
 }
 
 type SecretScannerOption struct {
-	ConfigPath string
+	ConfigPath  string
+	MaxFileSize int
 }
 
 type LicenseScannerOption struct {
@@ -75,6 +86,8 @@ type analyzer interface {
 	Analyze(ctx context.Context, input AnalysisInput) (*AnalysisResult, error)
 	Required(filePath string, info os.FileInfo) bool
 }
+
+type Analyzer = analyzer
 
 type PostAnalyzer interface {
 	Type() Type
@@ -160,7 +173,11 @@ type AnalysisResult struct {
 	Misconfigurations    []types.Misconfiguration
 	Secrets              []types.Secret
 	Licenses             []types.LicenseFile
+	WeakPasswords        []types.WeakPassword
 	SystemInstalledFiles []string // A list of files installed by OS package manager
+
+	Users  []types.User
+	Groups []types.Group
 
 	// Digests contains SHA-256 digests of unpackaged files
 	// used to search for SBOM attestation.
@@ -180,9 +197,13 @@ func NewAnalysisResult() *AnalysisResult {
 }
 
 func (r *AnalysisResult) isEmpty() bool {
-	return lo.IsEmpty(r.OS) && r.Repository == nil && len(r.PackageInfos) == 0 && len(r.Applications) == 0 &&
-		len(r.Misconfigurations) == 0 && len(r.Secrets) == 0 && len(r.Licenses) == 0 && len(r.SystemInstalledFiles) == 0 &&
+	return lo.IsEmpty(r.OS) && r.Users == nil && r.Groups == nil && r.Repository == nil && len(r.PackageInfos) == 0 && len(r.Applications) == 0 &&
+		len(r.Misconfigurations) == 0 && len(r.Secrets) == 0 && len(r.Licenses) == 0 && len(r.SystemInstalledFiles) == 0 && len(r.WeakPasswords) == 0 &&
 		r.BuildInfo == nil && len(r.Digests) == 0 && len(r.CustomResources) == 0
+}
+
+func (r *AnalysisResult) IsEmpty() bool {
+	return r.isEmpty()
 }
 
 func (r *AnalysisResult) Sort() {
@@ -246,6 +267,18 @@ func (r *AnalysisResult) Sort() {
 
 		return r.Licenses[i].Type < r.Licenses[j].Type
 	})
+
+	sort.Slice(r.WeakPasswords, func(i, j int) bool {
+		if r.WeakPasswords[i].Type == r.WeakPasswords[j].Type {
+			if r.WeakPasswords[i].Target == r.WeakPasswords[j].Target {
+				return r.WeakPasswords[i].Layer.DiffID < r.WeakPasswords[j].Layer.DiffID
+			}
+
+			return r.WeakPasswords[i].Target < r.WeakPasswords[j].Target
+		}
+
+		return r.WeakPasswords[i].Type < r.WeakPasswords[j].Type
+	})
 }
 
 func (r *AnalysisResult) Merge(newResult *AnalysisResult) {
@@ -258,6 +291,39 @@ func (r *AnalysisResult) Merge(newResult *AnalysisResult) {
 	defer r.m.Unlock()
 
 	r.OS.Merge(newResult.OS)
+
+	if newResult.Users != nil {
+		if r.Users == nil {
+			r.Users = newResult.Users
+		} else {
+			for index := range newResult.Users {
+				if lo.ContainsBy[types.User](r.Users, func(user types.User) bool {
+					return newResult.Users[index].ID == user.ID
+				}) {
+					continue
+				}
+
+				r.Users = append(r.Users, newResult.Users[index])
+			}
+		}
+	}
+
+	if newResult.Groups != nil {
+		if r.Groups == nil {
+			r.Groups = newResult.Groups
+		} else {
+		next:
+			for i := range newResult.Groups {
+				for j := range r.Groups {
+					if r.Groups[j].ID == newResult.Groups[i].ID {
+						continue next
+					}
+				}
+
+				r.Groups = append(r.Groups, newResult.Groups[i])
+			}
+		}
+	}
 
 	if newResult.Repository != nil {
 		r.Repository = newResult.Repository
@@ -280,6 +346,7 @@ func (r *AnalysisResult) Merge(newResult *AnalysisResult) {
 	r.Secrets = append(r.Secrets, newResult.Secrets...)
 	r.Licenses = append(r.Licenses, newResult.Licenses...)
 	r.SystemInstalledFiles = append(r.SystemInstalledFiles, newResult.SystemInstalledFiles...)
+	r.WeakPasswords = append(r.WeakPasswords, newResult.WeakPasswords...)
 
 	if newResult.BuildInfo != nil {
 		if r.BuildInfo == nil {
@@ -314,6 +381,38 @@ func belongToGroup(groupName Group, analyzerType Type, disabledAnalyzers []Type,
 	}
 
 	return true
+}
+
+func GetAnalyzers() map[Type]Analyzer {
+	return analyzers
+}
+
+func GetAnalyzer(analyzerType Type, opt AnalyzerOptions) Analyzer {
+	if a, ok := analyzers[analyzerType]; ok {
+		if ini, ok := a.(Initializer); ok {
+			if err := ini.Init(opt); err != nil {
+				return nil
+			}
+		}
+
+		return a
+	}
+
+	return nil
+}
+
+func GetPostAnalyzerInitializers() map[Type]postAnalyzerInitialize {
+	return postAnalyzers
+}
+
+func GetPostAnalyzer(postAnalyzerType Type, opt AnalyzerOptions) PostAnalyzer {
+	if init, ok := postAnalyzers[postAnalyzerType]; ok {
+		if a, err := init(opt); err == nil {
+			return a
+		}
+	}
+
+	return nil
 }
 
 const separator = ":"
@@ -426,15 +525,28 @@ func (ag AnalyzerGroup) AnalyzeFile(ctx context.Context, wg *sync.WaitGroup, lim
 			return xerrors.Errorf("unable to open %s: %w", filePath, err)
 		}
 
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if err = limit.Acquire(ctx, 1); err != nil {
 			return xerrors.Errorf("semaphore acquire: %w", err)
 		}
 		wg.Add(1)
 
 		go func(a analyzer, rc xio.ReadSeekCloserAt) {
-			defer limit.Release(1)
-			defer wg.Done()
-			defer rc.Close()
+			defer func() {
+				if reason := recover(); reason != nil {
+					logrus.Errorf("Analyzer %q paniced, %v", a.Type(), reason)
+					debug.PrintStack()
+				}
+
+				limit.Release(1)
+				wg.Done()
+				rc.Close()
+			}()
 
 			ret, err := a.Analyze(ctx, AnalysisInput{
 				Dir:      dir,
@@ -452,6 +564,39 @@ func (ag AnalyzerGroup) AnalyzeFile(ctx context.Context, wg *sync.WaitGroup, lim
 	}
 
 	return nil
+}
+
+func (ag AnalyzerGroup) Required(filePath string, info os.FileInfo, disabled []Type) bool {
+	// filepath extracted from tar file doesn't have the prefix "/"
+	cleanPath := strings.TrimLeft(filePath, "/")
+
+	for _, a := range ag.analyzers {
+		// Skip disabled analyzers
+		if slices.Contains(disabled, a.Type()) {
+			continue
+		}
+
+		if ag.filePatternMatch(a.Type(), cleanPath) || a.Required(cleanPath, info) {
+			return true
+		}
+	}
+
+	if info.IsDir() {
+		return false
+	}
+
+	for _, a := range ag.postAnalyzers {
+		// Skip disabled analyzers
+		if slices.Contains(disabled, a.Type()) {
+			continue
+		}
+
+		if ag.filePatternMatch(a.Type(), filePath) || a.Required(filePath, info) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // RequiredPostAnalyzers returns a list of analyzer types that require the given file.

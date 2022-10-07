@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/password"
 	"os"
 	"slices"
 
@@ -322,7 +323,7 @@ func (r *runner) initJavaDB(opts flag.Options) error {
 
 	// Update the Java DB
 	noProgress := opts.Quiet || opts.NoProgress
-	javadb.Init(opts.CacheDir, opts.JavaDBRepositories, opts.SkipJavaDBUpdate, noProgress, opts.RegistryOpts())
+	javadb.Init(opts.CacheDir, opts.JavaDBRepositories, opts.SkipJavaDBUpdate || opts.OfflineScan, noProgress, opts.RegistryOpts())
 	if opts.DownloadJavaDBOnly {
 		if err := javadb.Update(); err != nil {
 			return xerrors.Errorf("Java DB error: %w", err)
@@ -492,6 +493,13 @@ func (r *runner) initScannerConfig(ctx context.Context, opts flag.Options) (Scan
 		LicenseCategories:   opts.LicenseCategories,
 		FilePatterns:        opts.FilePatterns,
 		IncludeDevDeps:      opts.IncludeDevDeps,
+		WeakPasswordScanner: opts.WeakPasswordScanner,
+	}
+
+	if opts.WeakPasswordScanner == password.TomcatScanner {
+		scanOptions.WeakPasswordConfigs = opts.TomcatConfigs
+	} else if opts.WeakPasswordScanner == password.RedisScanner {
+		scanOptions.WeakPasswordScanner = opts.WeakPasswordScanner
 	}
 
 	if len(opts.ImageConfigScanners) != 0 {
@@ -570,6 +578,7 @@ func (r *runner) initScannerConfig(ctx context.Context, opts flag.Options) (Scan
 			AWSEndpoint:       opts.Endpoint,
 			FileChecksum:      fileChecksum,
 			DetectionPriority: opts.DetectionPriority,
+			LargeFileLimit:    opts.LargeFileLimit,
 
 			// For image scanning
 			ImageOption: ftypes.ImageOptions{
@@ -588,7 +597,8 @@ func (r *runner) initScannerConfig(ctx context.Context, opts flag.Options) (Scan
 
 			// For secret scanning
 			SecretScannerOption: analyzer.SecretScannerOption{
-				ConfigPath: opts.SecretConfigPath,
+				ConfigPath:  opts.SecretConfigPath,
+				MaxFileSize: opts.MaxFileSize,
 			},
 
 			// For license scanning
@@ -601,6 +611,15 @@ func (r *runner) initScannerConfig(ctx context.Context, opts flag.Options) (Scan
 			WalkerOption: walker.Option{
 				SkipFiles: opts.SkipFiles,
 				SkipDirs:  opts.SkipDirs,
+				Parallel:  opts.Parallel,
+				Threshold: opts.MemoryThreshold,
+			},
+
+			// For weak password scanning
+			WeakPasswordOption: analyzer.WeakPasswordOption{
+				Scanner: string(opts.WeakPasswordScanner),
+				Configs: scanOptions.WeakPasswordConfigs,
+				Policy:  opts.WeakPasswordPolicy,
 			},
 		},
 	}, scanOptions, nil

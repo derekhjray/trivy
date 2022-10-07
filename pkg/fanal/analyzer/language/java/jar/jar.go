@@ -2,18 +2,21 @@ package jar
 
 import (
 	"context"
+	"errors"
+	"gitee.com/anesec/ostrich/pkg/client"
+	"gitee.com/anesec/ostrich/pkg/errdefs"
+	otypes "gitee.com/anesec/ostrich/pkg/types"
+	"github.com/sirupsen/logrus"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/xerrors"
+	"sync"
 
 	"github.com/aquasecurity/trivy/pkg/dependency/parser/java/jar"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/language"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
-	"github.com/aquasecurity/trivy/pkg/javadb"
 	"github.com/aquasecurity/trivy/pkg/parallel"
 	xio "github.com/aquasecurity/trivy/pkg/x/io"
 )
@@ -33,31 +36,38 @@ var requiredExtensions = []string{
 
 // javaLibraryAnalyzer analyzes jar/war/ear/par files
 type javaLibraryAnalyzer struct {
-	parallel int
+	parallel       int
+	largeFileLimit int64
+	client         client.JavaDB
+	once           sync.Once
 }
 
 func newJavaLibraryAnalyzer(options analyzer.AnalyzerOptions) (analyzer.PostAnalyzer, error) {
 	return &javaLibraryAnalyzer{
-		parallel: options.Parallel,
+		parallel:       options.Parallel,
+		largeFileLimit: int64(options.LargeFileLimit),
 	}, nil
 }
 
 func (a *javaLibraryAnalyzer) PostAnalyze(ctx context.Context, input analyzer.PostAnalysisInput) (*analyzer.AnalysisResult, error) {
 	// TODO: think about the sonatype API and "--offline"
-	client, err := javadb.NewClient()
-	if err != nil {
-		return nil, xerrors.Errorf("Unable to initialize the Java DB: %s", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	// Skip analyzing JAR files as the nil client means the Java DB was not downloaded successfully.
-	if client == nil {
-		return nil, nil
+	var err error
+	if !input.Options.Offline {
+		// do not create javadb client if offline mode
+		a.once.Do(func() {
+			logrus.Debugf("Initialize Java dependency validation driver")
+			if a.client, err = client.NewJavaDBClient(client.URL(os.Getenv(otypes.OstrichJavaDBPolicy)), client.Insecure()); err != nil {
+				logrus.Warnf("Unable to initialize Java dependency validation driver, %v", err)
+				logrus.Warnf("Skip Java dependency validation while parsing Java packages")
+				return
+			}
+			logrus.Debugf("Initialize Java dependency validation driver done")
+		})
 	}
 
 	// It will be called on each JAR file
 	onFile := func(path string, info fs.FileInfo, r xio.ReadSeekerAt) (*types.Application, error) {
-		p := jar.NewParser(client, jar.WithSize(info.Size()), jar.WithFilePath(path))
+		p := jar.NewParser(a, jar.WithSize(info.Size()), jar.WithFilePath(path), jar.WithOffline(a.client == nil))
 		return language.ParsePackage(types.Jar, path, r, p, input.Options.FileChecksum)
 	}
 
@@ -71,7 +81,8 @@ func (a *javaLibraryAnalyzer) PostAnalyze(ctx context.Context, input analyzer.Po
 	}
 
 	if err = parallel.WalkDir(ctx, input.FS, ".", a.parallel, onFile, onResult); err != nil {
-		return nil, xerrors.Errorf("walk dir error: %w", err)
+		logrus.Debugf("Skip scanning java package, %v", err)
+		//return nil, xerrors.Errorf("walk dir error: %w", err)
 	}
 
 	return &analyzer.AnalysisResult{
@@ -79,7 +90,11 @@ func (a *javaLibraryAnalyzer) PostAnalyze(ctx context.Context, input analyzer.Po
 	}, nil
 }
 
-func (a *javaLibraryAnalyzer) Required(filePath string, _ os.FileInfo) bool {
+func (a *javaLibraryAnalyzer) Required(filePath string, info os.FileInfo) bool {
+	if a.largeFileLimit > 0 && info.Size() > a.largeFileLimit {
+		return false
+	}
+
 	ext := filepath.Ext(filePath)
 	for _, required := range requiredExtensions {
 		if strings.EqualFold(ext, required) {
@@ -95,4 +110,47 @@ func (a *javaLibraryAnalyzer) Type() analyzer.Type {
 
 func (a *javaLibraryAnalyzer) Version() int {
 	return version
+}
+
+func (a *javaLibraryAnalyzer) Exists(groupID, artifactID string) (bool, error) {
+	if a.client != nil {
+		return a.client.Exists(groupID, artifactID)
+	}
+
+	return false, jar.ArtifactNotFoundErr
+}
+
+func (a *javaLibraryAnalyzer) SearchBySHA1(sha1 string) (jar.Properties, error) {
+	if a.client != nil {
+		properties, err := a.client.SearchBySHA1(sha1)
+		if err != nil {
+			if errors.Is(err, errdefs.ErrArtifactNotFound) {
+				err = jar.ArtifactNotFoundErr
+			}
+
+			return jar.Properties{}, err
+		}
+
+		return jar.Properties{
+			GroupID:    properties.GroupID,
+			ArtifactID: properties.ArtifactID,
+			Version:    properties.Version,
+			FilePath:   properties.FilePath,
+		}, nil
+	}
+
+	return jar.Properties{}, jar.ArtifactNotFoundErr
+}
+
+func (a *javaLibraryAnalyzer) SearchByArtifactID(artifactID, version string) (string, error) {
+	if a.client != nil {
+		groupId, err := a.client.SearchByArtifactID(artifactID, version)
+		if err != nil && errors.Is(err, errdefs.ErrArtifactNotFound) {
+			err = jar.ArtifactNotFoundErr
+		}
+
+		return groupId, err
+	}
+
+	return "", jar.ArtifactNotFoundErr
 }

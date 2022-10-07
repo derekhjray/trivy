@@ -271,6 +271,7 @@ func NewImageCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		ScanFlagGroup:          flag.NewScanFlagGroup(),
 		SecretFlagGroup:        flag.NewSecretFlagGroup(),
 		VulnerabilityFlagGroup: flag.NewVulnerabilityFlagGroup(),
+		WeakPasswordFlagGroup:  flag.NewWeakPasswordFlagGroup(),
 	}
 
 	imageFlags.PackageFlagGroup.IncludeDevDeps = nil          // disable '--include-dev-deps'
@@ -350,6 +351,7 @@ func NewFilesystemCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		ScanFlagGroup:          flag.NewScanFlagGroup(),
 		SecretFlagGroup:        flag.NewSecretFlagGroup(),
 		VulnerabilityFlagGroup: flag.NewVulnerabilityFlagGroup(),
+		WeakPasswordFlagGroup:  flag.NewWeakPasswordFlagGroup(),
 	}
 
 	fsFlags.CacheFlagGroup.CacheBackend.Default = string(cache.TypeMemory)                           // Use memory cache by default
@@ -409,6 +411,7 @@ func NewRootfsCommand(globalFlags *flag.GlobalFlagGroup) *cobra.Command {
 		ScanFlagGroup:          flag.NewScanFlagGroup(),
 		SecretFlagGroup:        flag.NewSecretFlagGroup(),
 		VulnerabilityFlagGroup: flag.NewVulnerabilityFlagGroup(),
+		WeakPasswordFlagGroup:  flag.NewWeakPasswordFlagGroup(),
 	}
 	rootfsFlags.ReportFlagGroup.ReportFormat = nil                             // TODO: support --report summary
 	rootfsFlags.ReportFlagGroup.Compliance = nil                               // disable '--compliance'

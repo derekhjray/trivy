@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gitee.com/anesec/mobius/directio"
 	"io"
 	"net"
 	"net/http"
@@ -129,7 +130,7 @@ func PodmanImage(ref, host string) (Image, func(), error) {
 		return nil, cleanup, xerrors.Errorf("unable to inspect the image (%s): %w", ref, err)
 	}
 
-	f, err := os.CreateTemp("", "fanal-*")
+	f, err := directio.CreateTemp("", "fanal-*")
 	if err != nil {
 		return nil, cleanup, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

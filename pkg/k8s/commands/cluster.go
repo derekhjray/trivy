@@ -36,7 +36,11 @@ func clusterRun(ctx context.Context, opts flag.Options, cluster k8s.Cluster) err
 			trivyk8s.WithIncludeKinds(opts.IncludeKinds),
 			trivyk8s.WithExcludeOwned(opts.ExcludeOwned),
 		}
-		if opts.Scanners.AnyEnabled(types.MisconfigScanner) && !opts.DisableNodeCollector {
+		if opts.RuntimeOnly {
+			if artifacts, err = trivyk8s.New(cluster, k8sOpts...).ListClusterBomInfo(ctx); err != nil {
+				return xerrors.Errorf("get k8s artifacts with cluster bom info error: %w", err)
+			}
+		} else if opts.Scanners.AnyEnabled(types.MisconfigScanner) && !opts.DisableNodeCollector {
 			artifacts, err = trivyk8s.New(cluster, k8sOpts...).ListArtifactAndNodeInfo(ctx, nodeCollectorOptions(ctx, opts)...)
 			if err != nil {
 				return xerrors.Errorf("get k8s artifacts with node info error: %w", err)

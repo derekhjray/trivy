@@ -103,6 +103,9 @@ func toApplication(fileType types.LangType, filePath, libFilePath string, r xio.
 		pkgs[i].DependsOn = deps[pkg.ID]
 		pkgs[i].Digest = d
 		pkgs[i].Indirect = isIndirect(pkg.Relationship) // For backward compatibility
+		pkgs[i].Type = string(toPackageType(fileType))
+		pkgs[i].Size = pkg.Size
+		pkgs[i].Maintainer = pkg.Maintainer
 
 		for j, license := range pkg.Licenses {
 			pkgs[i].Licenses[j] = licensing.Normalize(license)
@@ -126,6 +129,41 @@ func calculateDigest(r xio.ReadSeekerAt) (digest.Digest, error) {
 	}
 
 	return digest.CalcSHA1(r)
+}
+
+func toPackageType(fileType types.LangType) analyzer.Type {
+	switch fileType {
+	case types.Jar, types.Pom, types.Gradle:
+		return analyzer.JavaPkg
+	case types.Npm, types.Yarn, types.NodePkg, types.Pnpm, types.JavaScript:
+		return analyzer.NpmPkg
+	case types.Composer:
+		return analyzer.PhpComposerPkg
+	case types.Pip, types.Pipenv, types.PythonPkg, types.Poetry:
+		return analyzer.PythonPkg
+	case types.Bundler, types.GemSpec:
+		return analyzer.RubyPkg
+	case types.Cargo, types.RustBinary:
+		return analyzer.RustPkg
+	case types.GoBinary, types.GoMod, types.GoModule:
+		return analyzer.GoModulePkg
+	case types.Cocoapods:
+		return analyzer.SwiftPkg
+	case types.Pub:
+		return analyzer.DartPkg
+	case types.Conan:
+		return analyzer.CppPkg
+	case types.DotNetCore, types.NuGet:
+		return analyzer.DotnetPkg
+	case types.Hex:
+		return analyzer.ErlangPkg
+	}
+
+	return analyzer.UnknownPkg
+}
+
+func PackageType(fileType types.LangType) analyzer.Type {
+	return toPackageType(fileType)
 }
 
 func isIndirect(rel types.Relationship) bool {

@@ -10,6 +10,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	apkVersion "github.com/knqyf263/go-apk-version"
@@ -68,7 +69,7 @@ func (a alpinePkgAnalyzer) parseApkInfo(ctx context.Context, scanner *bufio.Scan
 			if !pkg.Empty() {
 				pkgs = append(pkgs, pkg)
 			}
-			pkg = types.Package{}
+			pkg = types.Package{Type: string(analyzer.ApkPkg)}
 			continue
 		}
 
@@ -106,6 +107,12 @@ func (a alpinePkgAnalyzer) parseApkInfo(ctx context.Context, scanner *bufio.Scan
 			d := a.decodeChecksumLine(ctx, line)
 			if d != "" {
 				pkg.Digest = d
+			}
+		case "m:":
+			pkg.Maintainer = line[2:]
+		case "I:":
+			if size, err := strconv.Atoi(line[2:]); err == nil {
+				pkg.Size = int64(size)
 			}
 		}
 

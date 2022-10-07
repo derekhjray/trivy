@@ -1,6 +1,7 @@
 package flag
 
 import (
+	"github.com/aquasecurity/trivy/pkg/cache"
 	"time"
 )
 
@@ -67,8 +68,8 @@ type CacheFlagGroup struct {
 }
 
 type CacheOptions struct {
-	ClearCache bool
-
+	Cache        cache.Cache
+	ClearCache   bool
 	CacheBackend string
 	CacheTTL     time.Duration
 	RedisTLS     bool

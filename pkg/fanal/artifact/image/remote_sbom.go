@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gitee.com/anesec/mobius/directio"
 	"os"
 	"path/filepath"
 	"slices"
@@ -133,7 +134,7 @@ func (a Artifact) inspectRekorSBOMAttestation(ctx context.Context) (artifact.Ref
 		return artifact.Reference{}, xerrors.Errorf("failed to retrieve SBOM attestation: %w", err)
 	}
 
-	f, err := os.CreateTemp("", "sbom-*")
+	f, err := directio.CreateTemp("", "sbom-*")
 	if err != nil {
 		return artifact.Reference{}, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

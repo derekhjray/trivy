@@ -2,9 +2,12 @@ package flag
 
 import (
 	"fmt"
+	"github.com/aquasecurity/trivy/pkg/http"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"golang.org/x/xerrors"
+	"os"
 
 	"github.com/aquasecurity/trivy/pkg/db"
 	"github.com/aquasecurity/trivy/pkg/javadb"
@@ -54,13 +57,25 @@ var (
 		Name:       "db-repository",
 		ConfigName: "db.repository",
 		Default:    []string{db.DefaultGHCRRepository},
-		Usage:      "OCI repository(ies) to retrieve trivy-db in order of priority",
+		Usage:      "OCI/HTTPS repository(ies) to retrieve trivy-db in order of priority",
 	}
 	JavaDBRepositoryFlag = Flag[[]string]{
 		Name:       "java-db-repository",
 		ConfigName: "db.java-repository",
 		Default:    []string{javadb.DefaultGHCRRepository},
 		Usage:      "OCI repository(ies) to retrieve trivy-java-db in order of priority",
+	}
+	DBNameFlag = Flag[string]{
+		Name:       "db-name",
+		ConfigName: "db.name",
+		Usage:      "customized database name, only works for http repository",
+		Default:    "trivy.db",
+	}
+	DBTokenFlag = Flag[string]{
+		Name:       "db-token",
+		ConfigName: "db.token",
+		Usage:      "http database repository token, which added to 'Authorization' in http request header",
+		Default:    "",
 	}
 	LightFlag = Flag[bool]{
 		Name:       "light",
@@ -80,6 +95,8 @@ type DBFlagGroup struct {
 	NoProgress         *Flag[bool]
 	DBRepositories     *Flag[[]string]
 	JavaDBRepositories *Flag[[]string]
+	DBName             *Flag[string]
+	DBToken            *Flag[string]
 	Light              *Flag[bool] // deprecated
 }
 
@@ -106,6 +123,8 @@ func NewDBFlagGroup() *DBFlagGroup {
 		NoProgress:         NoProgressFlag.Clone(),
 		DBRepositories:     DBRepositoryFlag.Clone(),
 		JavaDBRepositories: JavaDBRepositoryFlag.Clone(),
+		DBName:             DBNameFlag.Clone(),
+		DBToken:            DBTokenFlag.Clone(),
 	}
 }
 
@@ -124,6 +143,8 @@ func (f *DBFlagGroup) Flags() []Flagger {
 		f.DBRepositories,
 		f.JavaDBRepositories,
 		f.Light,
+		f.DBName,
+		f.DBToken,
 	}
 }
 
@@ -149,9 +170,17 @@ func (f *DBFlagGroup) ToOptions() (DBOptions, error) {
 
 	var dbRepositories, javaDBRepositories []name.Reference
 	for _, repo := range f.DBRepositories.Value() {
-		ref, err := parseRepository(repo, db.SchemaVersion)
-		if err != nil {
-			return DBOptions{}, xerrors.Errorf("invalid DB repository: %w", err)
+		var (
+			ref name.Reference
+			err error
+		)
+		if strings.HasPrefix(repo, "https://") {
+			ref = http.NewRepository(repo)
+		} else {
+			ref, err = parseRepository(repo, db.SchemaVersion)
+			if err != nil {
+				return DBOptions{}, xerrors.Errorf("invalid DB repository: %w", err)
+			}
 		}
 		dbRepositories = append(dbRepositories, ref)
 	}
@@ -162,6 +191,14 @@ func (f *DBFlagGroup) ToOptions() (DBOptions, error) {
 			return DBOptions{}, xerrors.Errorf("invalid javadb repository: %w", err)
 		}
 		javaDBRepositories = append(javaDBRepositories, ref)
+	}
+
+	if dbName := f.DBName.Value(); dbName != "" {
+		_ = os.Setenv("TRIVY_DB_NAME", dbName)
+	}
+
+	if dbToken := f.DBToken.Value(); dbToken != "" {
+		_ = os.Setenv("TRIVY_DB_TOKEN", dbToken)
 	}
 
 	return DBOptions{

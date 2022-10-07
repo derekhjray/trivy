@@ -25,6 +25,8 @@ var _ analyzer.Initializer = &SecretAnalyzer{}
 
 const version = 1
 
+const size256k = 256 << 10
+
 var (
 	skipFiles = []string{
 		"go.mod",
@@ -72,19 +74,26 @@ func allowedBinary(filename string) bool {
 
 // SecretAnalyzer is an analyzer for secrets
 type SecretAnalyzer struct {
-	scanner    secret.Scanner
-	configPath string
+	scanner     secret.Scanner
+	configPath  string
+	maxFileSize int64
 }
 
 func NewSecretAnalyzer(s secret.Scanner, configPath string) *SecretAnalyzer {
 	return &SecretAnalyzer{
-		scanner:    s,
-		configPath: configPath,
+		scanner:     s,
+		configPath:  configPath,
+		maxFileSize: size256k,
 	}
 }
 
 // Init initializes and sets a secret scanner
 func (a *SecretAnalyzer) Init(opt analyzer.AnalyzerOptions) error {
+	a.maxFileSize = size256k
+	if opt.SecretScannerOption.MaxFileSize > 0 {
+		a.maxFileSize = int64(opt.SecretScannerOption.MaxFileSize)
+	}
+
 	if opt.SecretScannerOption.ConfigPath == a.configPath && !lo.IsEmpty(a.scanner) {
 		// This check is for tools importing Trivy and customize analyzers
 		// Never reach here in Trivy OSS
@@ -136,6 +145,7 @@ func (a *SecretAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInput
 
 	result := a.scanner.Scan(secret.ScanArgs{
 		FilePath: filePath,
+		FileInfo: input.Info,
 		Content:  content,
 		Binary:   binary,
 	})
@@ -150,8 +160,8 @@ func (a *SecretAnalyzer) Analyze(_ context.Context, input analyzer.AnalysisInput
 }
 
 func (a *SecretAnalyzer) Required(filePath string, fi os.FileInfo) bool {
-	// Skip small files
-	if fi.Size() < 10 {
+	// Skip small, large or irregular files
+	if fi.Size() < 10 || fi.Size() > a.maxFileSize || !fi.Mode().IsRegular() {
 		return false
 	}
 

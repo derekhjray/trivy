@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"golang.org/x/xerrors"
 
@@ -40,6 +41,16 @@ var (
 	// e.g. s.license = ["MIT".freeze, "BSDL".freeze]
 	//      => "MIT".freeze, "BSDL".freeze
 	licensesRegexp = regexp.MustCompile(`\.licenses\s*=\s*\[(?P<licenses>.+)\]`)
+
+	// Capture the value of "license"
+	// e.g. s.license = "MIT"
+	//      => "MIT"
+	authorRegexp = regexp.MustCompile(`\.author\s*=\s*(?P<author>\S+)`)
+
+	// Capture the value of "licenses"
+	// e.g. s.license = ["MIT".freeze, "BSDL".freeze]
+	//      => "MIT".freeze, "BSDL".freeze
+	authorsRegexp = regexp.MustCompile(`\.authors\s*=\s*\[(?P<authors>.+)\]`)
 )
 
 type Parser struct{}
@@ -49,7 +60,7 @@ func NewParser() *Parser {
 }
 
 func (p *Parser) Parse(r xio.ReadSeekerAt) (pkgs []ftypes.Package, deps []ftypes.Dependency, err error) {
-	var newVar, name, version, license string
+	var newVar, name, version, license, author string
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
@@ -80,10 +91,16 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) (pkgs []ftypes.Package, deps []ftypes
 			// https://guides.rubygems.org/specification-reference/#license=
 			license = findSubString(licenseRegexp, line, "license")
 			license = trim(license)
+		case strings.HasPrefix(line, fmt.Sprintf("%s.authors", newVar)):
+			author = findSubString(authorsRegexp, line, "authors")
+			author = parseAuthors(author)
+		case strings.HasPrefix(line, fmt.Sprintf("%s.author", newVar)):
+			author = findSubString(authorRegexp, line, "author")
+			author = trim(author)
 		}
 
 		// No need to iterate the loop anymore
-		if name != "" && version != "" && license != "" {
+		if name != "" && version != "" && license != "" && author != "" {
 			break
 		}
 	}
@@ -97,9 +114,10 @@ func (p *Parser) Parse(r xio.ReadSeekerAt) (pkgs []ftypes.Package, deps []ftypes
 
 	return []ftypes.Package{
 		{
-			Name:     name,
-			Version:  version,
-			Licenses: licensing.SplitLicenses(license),
+			Name:       name,
+			Version:    version,
+			Licenses:   licensing.SplitLicenses(license),
+			Maintainer: author,
 		},
 	}, nil, nil
 }
@@ -133,4 +151,17 @@ func parseLicenses(s string) string {
 	}
 
 	return strings.Join(licenses, ", ")
+}
+
+func parseAuthors(s string) string {
+	ss := strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || r == ','
+	})
+
+	authors := make([]string, 0, len(ss))
+	for _, a := range ss {
+		authors = append(authors, trim(a))
+	}
+
+	return strings.Join(authors, ", ")
 }

@@ -79,6 +79,7 @@ func (s *Scanner) Detect(ctx context.Context, osVer string, _ *ftypes.Repository
 				VendorIDs:        adv.VendorIDs,
 				PkgID:            pkg.ID,
 				PkgName:          pkg.Name,
+				PkgType:          pkg.Type,
 				InstalledVersion: utils.FormatVersion(pkg),
 				FixedVersion:     adv.FixedVersion,
 				PkgIdentifier:    pkg.Identifier,

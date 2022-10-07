@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -39,6 +40,7 @@ func Get(ctx context.Context, ref name.Reference, option types.RegistryOptions) 
 	for _, authOpt := range authOptions(ctx, ref, option) {
 		remoteOpts := []remote.Option{
 			remote.WithTransport(tr),
+			remote.WithContext(ctx),
 			authOpt,
 		}
 
@@ -84,6 +86,7 @@ func Image(ctx context.Context, ref name.Reference, option types.RegistryOptions
 	for _, authOpt := range authOptions(ctx, ref, option) {
 		remoteOpts := []remote.Option{
 			remote.WithTransport(tr),
+			remote.WithContext(ctx),
 			authOpt,
 		}
 		index, err := remote.Image(ref, remoteOpts...)
@@ -111,6 +114,7 @@ func Referrers(ctx context.Context, d name.Digest, option types.RegistryOptions)
 	for _, authOpt := range authOptions(ctx, d, option) {
 		remoteOpts := []remote.Option{
 			remote.WithTransport(tr),
+			remote.WithContext(ctx),
 			authOpt,
 		}
 		index, err := remote.Referrers(d, remoteOpts...)
@@ -131,6 +135,8 @@ func httpTransport(option types.RegistryOptions) (http.RoundTripper, error) {
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DialContext = d.DialContext
+	tr.ForceAttemptHTTP2 = os.Getenv("FORCE_ATTEMPT_HTTP2") == "true"
+	tr.DisableKeepAlives = os.Getenv("HTTP_KEEP_ALIVE") != "true"
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: option.Insecure}
 
 	if len(option.ClientCert) != 0 && len(option.ClientKey) != 0 {
