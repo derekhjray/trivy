@@ -145,7 +145,7 @@ func (Artifact) Clean(_ artifact.Reference) error {
 
 func (a Artifact) calcCacheKeys(imageID string, diffIDs []string) (string, []string, error) {
 	// Pass an empty config scanner option so that the cache key can be the same, even when policies are updated.
-	imageKey, err := cache.CalcKey(imageID, a.configAnalyzer.AnalyzerVersions(), nil, artifact.Option{})
+	imageKey, err := cache.CalcKey(imageID, a.configAnalyzer.AnalyzerVersions(), nil, artifact.Option{SecretScannerOption: analyzer.SecretScannerOption{ConfigPath: a.artifactOption.SecretScannerOption.ConfigPath}})
 	if err != nil {
 		return "", nil, err
 	}
