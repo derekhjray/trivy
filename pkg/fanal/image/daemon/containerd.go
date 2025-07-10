@@ -21,8 +21,10 @@ import (
 	refdocker "github.com/containerd/containerd/reference/docker"
 	api "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	dclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/samber/lo"
@@ -56,7 +58,7 @@ func (n familiarNamed) String() string {
 }
 
 func imageWriter(client *containerd.Client, img containerd.Image, platform types.Platform) imageSave {
-	return func(ctx context.Context, ref []string) (io.ReadCloser, error) {
+	return func(ctx context.Context, ref []string, _ ...dclient.ImageSaveOption) (io.ReadCloser, error) {
 		if len(ref) < 1 {
 			return nil, xerrors.New("no image reference")
 		}
@@ -358,7 +360,10 @@ func inspect(ctx context.Context, img containerd.Image, ref refdocker.Reference)
 		Comment:     lastHistory.Comment,
 		Created:     created,
 		Author:      lastHistory.Author,
-		Config: &container.Config{
+		Config: &dockerspec.DockerOCIImageConfig{
+			ImageConfig: imgConfig.Config,
+		},
+		ContainerConfig: &container.Config{
 			User:         imgConfig.Config.User,
 			ExposedPorts: portSet,
 			Env:          imgConfig.Config.Env,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gitee.com/anesec/mobius/directio"
+	dclient "github.com/docker/docker/client"
 	"io"
 	"net"
 	"net/http"
@@ -99,7 +100,7 @@ func (p podmanClient) imageHistoryInspect(imageName string) ([]dimage.HistoryRes
 	return history, nil
 }
 
-func (p podmanClient) imageSave(_ context.Context, imageNames []string) (io.ReadCloser, error) {
+func (p podmanClient) imageSave(_ context.Context, imageNames []string, _ ...dclient.ImageSaveOption) (io.ReadCloser, error) {
 	if len(imageNames) < 1 {
 		return nil, xerrors.Errorf("no specified image")
 	}
