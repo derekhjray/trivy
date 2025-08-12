@@ -7,11 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gitee.com/anesec/mobius/types"
-	"github.com/aquasecurity/trivy-db/pkg/db"
-	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/xerrors"
 	"io"
 	"net"
 	"net/http"
@@ -20,6 +15,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gitee.com/anesec/mobius/types"
+	"github.com/aquasecurity/trivy-db/pkg/db"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/xerrors"
 )
 
 const (
@@ -60,9 +61,8 @@ func NewArtifact(url string, quiet bool, options ...Option) (*Artifact, error) {
 	}
 
 	tenantId := os.Getenv(types.TenantId)
-	shardId := os.Getenv(types.ShardId)
-	if tenantId != "" && shardId != "" {
-		af.url = fmt.Sprintf("%s?TenantID=%s&ShardID=%s", af.url, tenantId, shardId)
+	if tenantId != "" {
+		af.url = fmt.Sprintf("%s?TenantID=%s", af.url, tenantId)
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
