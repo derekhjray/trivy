@@ -3,7 +3,7 @@ module github.com/aquasecurity/trivy
 go 1.24.6
 
 require (
-	gitee.com/anesec/ferret v0.2.1-0.20240715060245-a9b2b14d92ff
+	gitee.com/anesec/ferret v0.2.1-0.20250904035430-3a446172a6dc
 	gitee.com/anesec/mobius v0.1.2-0.20250812061843-f48584fef8eb
 	gitee.com/anesec/ostrich v0.2.3-0.20240919060340-7d0d9a025b89
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible

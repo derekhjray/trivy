@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"io"
+	"strings"
+
 	"gitee.com/anesec/ferret/secrets/templates"
 	stypes "gitee.com/anesec/ferret/secrets/types"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/password"
-	"io"
-	"strings"
 )
 
 func init() {
@@ -22,12 +23,12 @@ func (rs *redisScanner) Name() string {
 	return stypes.RedisScanner
 }
 
-func (rs *redisScanner) Scan(ctx context.Context, file *stypes.File) ([]*stypes.WeakPassword, error) {
+func (rs *redisScanner) Scan(ctx context.Context, file *stypes.File, options []templates.Option) ([]*stypes.WeakPassword, error) {
 	if file == nil || file.Content == nil {
 		return nil, nil
 	}
 
-	weakness, err := rs.enumerate(ctx, file.Content, file.Path, "")
+	weakness, err := rs.enumerate(ctx, file.Content, file.Path, "", options)
 	if err != nil || weakness == nil {
 		if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 			return nil, err
@@ -39,7 +40,7 @@ func (rs *redisScanner) Scan(ctx context.Context, file *stypes.File) ([]*stypes.
 	return []*stypes.WeakPassword{weakness}, nil
 }
 
-func (rs *redisScanner) enumerate(ctx context.Context, r io.Reader, target, artifact string) (*stypes.WeakPassword, error) {
+func (rs *redisScanner) enumerate(ctx context.Context, r io.Reader, target, _ string, options []templates.Option) (*stypes.WeakPassword, error) {
 	var (
 		conf *config
 		err  error
@@ -79,17 +80,19 @@ func (rs *redisScanner) enumerate(ctx context.Context, r io.Reader, target, arti
 		}, nil
 	}
 
+	options = append(options, templates.Pair("", conf.password))
 	var pass string
-	pass, err = templates.Enumerate(ctx, templates.Pair("", conf.password))
+	pass, err = templates.Enumerate(ctx, options...)
 	if err != nil {
-		switch e := err.(type) {
-		case *templates.WeakError:
+		var we *templates.WeakError
+		switch {
+		case errors.As(err, &we):
 			return &stypes.WeakPassword{
 				Service:  rs.Name(),
 				Target:   target,
 				Password: pass,
-				Type:     e.Type(),
-				Reason:   e.Error(),
+				Type:     we.Type(),
+				Reason:   we.Error(),
 			}, nil
 		default:
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

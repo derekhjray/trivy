@@ -3,7 +3,6 @@ package analyzer
 import (
 	"context"
 	"errors"
-	"github.com/sirupsen/logrus"
 	"io/fs"
 	"os"
 	"regexp"
@@ -12,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/samber/lo"
 	"golang.org/x/sync/semaphore"
@@ -55,9 +56,10 @@ type AnalyzerOptions struct {
 }
 
 type WeakPasswordOption struct {
-	Scanner string
-	Configs []string
-	Policy  string
+	Scanner  string
+	Configs  []string
+	Policy   string
+	TenantId int64
 }
 
 type SecretScannerOption struct {

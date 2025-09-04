@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/password"
 	"os"
 	"slices"
+
+	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/password"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/samber/lo"
@@ -617,9 +618,10 @@ func (r *runner) initScannerConfig(ctx context.Context, opts flag.Options) (Scan
 
 			// For weak password scanning
 			WeakPasswordOption: analyzer.WeakPasswordOption{
-				Scanner: string(opts.WeakPasswordScanner),
-				Configs: scanOptions.WeakPasswordConfigs,
-				Policy:  opts.WeakPasswordPolicy,
+				Scanner:  string(opts.WeakPasswordScanner),
+				Configs:  scanOptions.WeakPasswordConfigs,
+				Policy:   opts.WeakPasswordPolicy,
+				TenantId: opts.TenantId,
 			},
 		},
 	}, scanOptions, nil

@@ -2,9 +2,10 @@ package password
 
 import (
 	"context"
+	"sync"
+
 	"gitee.com/anesec/ferret/secrets/templates"
 	stypes "gitee.com/anesec/ferret/secrets/types"
-	"sync"
 )
 
 var (
@@ -14,7 +15,7 @@ var (
 
 type Scanner interface {
 	Name() string
-	Scan(context.Context, *stypes.File) ([]*stypes.WeakPassword, error)
+	Scan(context.Context, *stypes.File, []templates.Option) ([]*stypes.WeakPassword, error)
 }
 
 func RegisterScaner(scanner Scanner) {
@@ -54,6 +55,8 @@ func Scan(ctx context.Context, options *stypes.Options) ([]*stypes.WeakPassword,
 		opts = append(opts, templates.MustContainSymbol())
 	}
 
+	opts = append(opts, templates.Tenant(options.TenantId))
+
 	if err = templates.Load(ctx, opts...); err != nil {
 		return nil, err
 	}
@@ -65,7 +68,7 @@ func Scan(ctx context.Context, options *stypes.Options) ([]*stypes.WeakPassword,
 	if options.File != nil {
 		for _, scanner := range scanners {
 			if scanner.Name() == options.File.Scanner {
-				weaknesses, err = scanner.Scan(ctx, options.File)
+				weaknesses, err = scanner.Scan(ctx, options.File, opts)
 				break
 			}
 		}

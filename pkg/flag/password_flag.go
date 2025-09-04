@@ -50,6 +50,8 @@ type WeakPasswordOptions struct {
 
 	WeakPasswordPolicy string
 
+	TenantId int64
+
 	// scanner configurations
 	RedisConfigs  []string
 	TomcatConfigs []string

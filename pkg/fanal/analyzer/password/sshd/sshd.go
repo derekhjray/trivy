@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"io"
+	"strings"
+
 	"gitee.com/anesec/ferret/secrets/templates"
 	stypes "gitee.com/anesec/ferret/secrets/types"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer/password"
-	"io"
-	"strings"
 )
 
 func init() {
@@ -22,12 +23,12 @@ func (ss *sshScanner) Name() string {
 	return stypes.SSHScanner
 }
 
-func (ss *sshScanner) Scan(ctx context.Context, file *stypes.File) ([]*stypes.WeakPassword, error) {
+func (ss *sshScanner) Scan(ctx context.Context, file *stypes.File, options []templates.Option) ([]*stypes.WeakPassword, error) {
 	if file == nil || file.Content == nil {
 		return nil, nil
 	}
 
-	weaknesses, err := ss.enumerate(ctx, file.Content, file.Path, "")
+	weaknesses, err := ss.enumerate(ctx, file.Content, file.Path, "", options)
 	if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		return nil, err
 	}
@@ -35,7 +36,7 @@ func (ss *sshScanner) Scan(ctx context.Context, file *stypes.File) ([]*stypes.We
 	return weaknesses, nil
 }
 
-func (ss *sshScanner) enumerate(ctx context.Context, r io.Reader, target string, artifact interface{}) ([]*stypes.WeakPassword, error) {
+func (ss *sshScanner) enumerate(ctx context.Context, r io.Reader, target string, _ interface{}, options []templates.Option) ([]*stypes.WeakPassword, error) {
 	var (
 		pass       string
 		weaknesses []*stypes.WeakPassword
@@ -54,17 +55,19 @@ func (ss *sshScanner) enumerate(ctx context.Context, r io.Reader, target string,
 			continue
 		}
 
-		pass, err = templates.Enumerate(ctx, templates.Pair(fields[0], fields[1]), templates.Shadow())
+		opts := append(options, templates.Pair(fields[0], fields[1]), templates.Shadow())
+		pass, err = templates.Enumerate(ctx, opts...)
 		if err != nil {
-			switch e := err.(type) {
-			case *templates.WeakError:
+			var we *templates.WeakError
+			switch {
+			case errors.As(err, &we):
 				weakness := &stypes.WeakPassword{
 					Service:  ss.Name(),
 					Target:   target,
 					User:     fields[0],
 					Password: pass,
-					Type:     e.Type(),
-					Reason:   e.Error(),
+					Type:     we.Type(),
+					Reason:   we.Error(),
 				}
 
 				weaknesses = append(weaknesses, weakness)

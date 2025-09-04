@@ -2,13 +2,14 @@ package password
 
 import (
 	"context"
+	"os"
+	"strings"
+
 	stypes "gitee.com/anesec/ferret/secrets/types"
 	"github.com/aquasecurity/trivy/pkg/fanal/analyzer"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/types"
 	"github.com/samber/lo"
-	"os"
-	"strings"
 )
 
 func init() {
@@ -39,6 +40,7 @@ type passwordAnalyzer struct {
 	scanner types.Scanner
 	configs []string
 	policy  string
+	tenant  int64
 }
 
 func (a *passwordAnalyzer) Init(opts analyzer.AnalyzerOptions) error {
@@ -58,6 +60,8 @@ func (a *passwordAnalyzer) Init(opts analyzer.AnalyzerOptions) error {
 		a.configs = weakPasswordConfigs[a.scanner]
 	}
 
+	a.tenant = opts.WeakPasswordOption.TenantId
+
 	return nil
 }
 
@@ -75,6 +79,7 @@ func (a *passwordAnalyzer) Analyze(ctx context.Context, input analyzer.AnalysisI
 			Scanner: string(a.scanner),
 		},
 		Templates: a.policy,
+		TenantId:  a.tenant,
 	}
 
 	weaknesses, err := Scan(ctx, opts)
