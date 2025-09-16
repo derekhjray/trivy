@@ -64,6 +64,7 @@ func (ss *sshScanner) enumerate(ctx context.Context, r io.Reader, target string,
 				weakness := &stypes.WeakPassword{
 					Service:  ss.Name(),
 					Target:   target,
+					Rule:     we.Rule(),
 					User:     fields[0],
 					Password: pass,
 					Type:     we.Type(),

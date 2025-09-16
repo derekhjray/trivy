@@ -3,7 +3,7 @@ module github.com/aquasecurity/trivy
 go 1.24.6
 
 require (
-	gitee.com/anesec/ferret v0.2.1-0.20250904035430-3a446172a6dc
+	gitee.com/anesec/ferret v0.2.1-0.20250916021431-eeb0ae5b7a24
 	gitee.com/anesec/mobius v0.1.2-0.20250812061843-f48584fef8eb
 	gitee.com/anesec/ostrich v0.2.3-0.20240919060340-7d0d9a025b89
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible
@@ -340,6 +340,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.2.0 // indirect
 	github.com/opencontainers/selinux v1.11.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
+	github.com/openwall/yescrypt-go v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect

@@ -90,6 +90,7 @@ func (rs *redisScanner) enumerate(ctx context.Context, r io.Reader, target, _ st
 			return &stypes.WeakPassword{
 				Service:  rs.Name(),
 				Target:   target,
+				Rule:     we.Rule(),
 				Password: pass,
 				Type:     we.Type(),
 				Reason:   we.Error(),

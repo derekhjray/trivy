@@ -68,6 +68,7 @@ func (ts *tomcatScanner) enumerate(ctx context.Context, r io.Reader, target stri
 				weakness := &stypes.WeakPassword{
 					Service:  ts.Name(),
 					Target:   target,
+					Rule:     we.Rule(),
 					User:     user.Name,
 					Password: pass,
 					Type:     we.Type(),
