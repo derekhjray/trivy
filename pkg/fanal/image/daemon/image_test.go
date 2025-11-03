@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,7 +60,7 @@ func Test_image_ConfigName(t *testing.T) {
 			ref, err := name.ParseReference(tt.imageName)
 			require.NoError(t, err)
 
-			img, cleanup, err := DockerImage(context.Background(), ref, "")
+			img, cleanup, err := DockerImage(t.Context(), ref, "")
 			require.NoError(t, err)
 			defer cleanup()
 
@@ -104,7 +103,7 @@ func Test_image_ConfigNameWithCustomDockerHost(t *testing.T) {
 		dockerHostParam = te.Listener.Addr().Network() + "://" + te.Listener.Addr().String()
 	}
 
-	img, cleanup, err := DockerImage(context.Background(), ref, dockerHostParam)
+	img, cleanup, err := DockerImage(t.Context(), ref, dockerHostParam)
 	require.NoError(t, err)
 	defer cleanup()
 
@@ -144,7 +143,7 @@ func Test_image_ConfigNameWithCustomPodmanHost(t *testing.T) {
 	te := engine.NewDockerEngine(eo)
 	defer te.Close()
 
-	img, cleanup, err := PodmanImage(context.Background(), ref.Name(), podmanSocket)
+	img, cleanup, err := PodmanImage(t.Context(), ref.Name(), podmanSocket)
 	require.NoError(t, err)
 	defer cleanup()
 
@@ -241,7 +240,7 @@ func Test_image_ConfigFile(t *testing.T) {
 			ref, err := name.ParseReference(tt.imageName)
 			require.NoError(t, err)
 
-			img, cleanup, err := DockerImage(context.Background(), ref, "")
+			img, cleanup, err := DockerImage(t.Context(), ref, "")
 			require.NoError(t, err)
 			defer cleanup()
 
@@ -286,7 +285,7 @@ func Test_image_LayerByDiffID(t *testing.T) {
 			ref, err := name.ParseReference(tt.imageName)
 			require.NoError(t, err)
 
-			img, cleanup, err := DockerImage(context.Background(), ref, "")
+			img, cleanup, err := DockerImage(t.Context(), ref, "")
 			require.NoError(t, err)
 			defer cleanup()
 
@@ -315,7 +314,7 @@ func Test_image_RawConfigFile(t *testing.T) {
 			ref, err := name.ParseReference(tt.imageName)
 			require.NoError(t, err)
 
-			img, cleanup, err := DockerImage(context.Background(), ref, "")
+			img, cleanup, err := DockerImage(t.Context(), ref, "")
 			require.NoError(t, err)
 			defer cleanup()
 
