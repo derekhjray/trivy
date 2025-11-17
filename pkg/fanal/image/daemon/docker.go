@@ -6,6 +6,7 @@ import (
 
 	"gitee.com/anesec/mobius/directio"
 
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/name"
 	"golang.org/x/xerrors"
@@ -53,7 +54,7 @@ func DockerImage(ctx context.Context, ref name.Reference, host string) (Image, f
 		return nil, cleanup, xerrors.Errorf("unable to get history (%s): %w", imageID, err)
 	}
 
-	f, err := directio.CreateTemp("", "fanal-*")
+	f, err := directio.CreateTemp(utils.TempDir(), "fanal-*")
 	if err != nil {
 		return nil, cleanup, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

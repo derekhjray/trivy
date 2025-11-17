@@ -12,6 +12,7 @@ import (
 
 	"gitee.com/anesec/mobius/directio"
 
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	api "github.com/docker/docker/api/types"
 	dimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -141,7 +142,7 @@ func PodmanImage(ctx context.Context, ref, host string) (Image, func(), error) {
 		return nil, cleanup, xerrors.Errorf("unable to inspect the image (%s): %w", ref, err)
 	}
 
-	f, err := directio.CreateTemp("", "fanal-*")
+	f, err := directio.CreateTemp(utils.TempDir(), "fanal-*")
 	if err != nil {
 		return nil, cleanup, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

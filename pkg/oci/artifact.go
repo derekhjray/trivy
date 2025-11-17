@@ -18,6 +18,7 @@ import (
 
 	"github.com/aquasecurity/trivy/pkg/downloader"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/remote"
 	"github.com/aquasecurity/trivy/pkg/version/doc"
@@ -173,7 +174,7 @@ func (a *Artifact) download(ctx context.Context, layer v1.Layer, fileName, dir s
 	defer bar.Finish()
 
 	// https://github.com/hashicorp/go-getter/issues/326
-	tempDir, err := os.MkdirTemp("", "trivy")
+	tempDir, err := os.MkdirTemp(utils.TempDir(), "trivy")
 	if err != nil {
 		return xerrors.Errorf("failed to create a temp dir: %w", err)
 	}

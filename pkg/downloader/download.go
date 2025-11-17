@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/google/go-github/v62/github"
 	getter "github.com/hashicorp/go-getter"
 	"github.com/samber/lo"
@@ -35,7 +36,7 @@ type Auth struct {
 
 // DownloadToTempDir downloads the configured source to a temp dir.
 func DownloadToTempDir(ctx context.Context, src string, opts Options) (string, error) {
-	tempDir, err := os.MkdirTemp("", "trivy-download")
+	tempDir, err := os.MkdirTemp(utils.TempDir(), "trivy-download")
 	if err != nil {
 		return "", xerrors.Errorf("failed to create a temp dir: %w", err)
 	}

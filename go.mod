@@ -2,6 +2,8 @@ module github.com/aquasecurity/trivy
 
 go 1.24.6
 
+replace github.com/google/go-containerregistry => github.com/derekhjray/go-containerregistry v0.0.0-20251117014533-efda87e0dd8c
+
 require (
 	gitee.com/anesec/ferret v0.2.1-0.20250916021431-eeb0ae5b7a24
 	gitee.com/anesec/mobius v0.1.2-0.20250812061843-f48584fef8eb

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -74,11 +75,12 @@ func TestLayerTar_Walk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f, err := os.Open("testdata/test.tar")
+
+			layer, err := tarball.LayerFromFile("testdata/test.tar")
 			require.NoError(t, err)
 
 			w := walker.NewLayerTar(tt.option)
-			gotOpqDirs, gotWhFiles, err := w.Walk(f, tt.analyzeFn)
+			gotOpqDirs, gotWhFiles, err := w.Walk(t.Context(), layer, nil, tt.analyzeFn)
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr)

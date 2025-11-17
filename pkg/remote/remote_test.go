@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -279,4 +281,40 @@ func localImage(t *testing.T) v1.Image {
 	img, err := tarfile.ImageFromPath("../fanal/test/testdata/alpine-310.tar.gz")
 	require.NoError(t, err)
 	return img
+}
+
+func TestRetryBackOff(t *testing.T) {
+	var total time.Duration
+	backoff := remote.Backoff{
+		Duration: 3000 * time.Millisecond,
+		Factor:   1.45,
+		Jitter:   0.3,
+		Steps:    5,
+	}
+
+	for backoff.Steps > 0 {
+		duration := backoff.Step()
+		total += duration
+		t.Log(duration)
+	}
+
+	t.Log("total:", total)
+}
+
+func TestResumableBackOff(t *testing.T) {
+	var total time.Duration
+	backoff := remote.Backoff{
+		Duration: 2000 * time.Millisecond,
+		Factor:   1.65,
+		Jitter:   0.3,
+		Steps:    5,
+	}
+
+	for backoff.Steps > 0 {
+		duration := backoff.Step()
+		total += duration
+		t.Log(duration)
+	}
+
+	t.Log("total:", total)
 }

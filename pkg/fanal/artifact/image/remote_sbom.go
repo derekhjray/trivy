@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gitee.com/anesec/mobius/directio"
 	"os"
 	"path/filepath"
 	"slices"
+
+	"gitee.com/anesec/mobius/directio"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -18,6 +19,7 @@ import (
 	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
 	"github.com/aquasecurity/trivy/pkg/fanal/artifact/sbom"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/oci"
 	"github.com/aquasecurity/trivy/pkg/remote"
@@ -89,7 +91,7 @@ func (a Artifact) parseReferrer(ctx context.Context, repo string, desc v1.Descri
 	const fileName string = "referrer.sbom"
 	repoName := fmt.Sprintf("%s@%s", repo, desc.Digest)
 
-	tmpDir, err := os.MkdirTemp("", "trivy-sbom-*")
+	tmpDir, err := os.MkdirTemp(utils.TempDir(), "trivy-sbom-*")
 	if err != nil {
 		return artifact.Reference{}, xerrors.Errorf("mkdir temp error: %w", err)
 	}
@@ -134,7 +136,7 @@ func (a Artifact) inspectRekorSBOMAttestation(ctx context.Context) (artifact.Ref
 		return artifact.Reference{}, xerrors.Errorf("failed to retrieve SBOM attestation: %w", err)
 	}
 
-	f, err := directio.CreateTemp("", "sbom-*")
+	f, err := directio.CreateTemp(utils.TempDir(), "sbom-*")
 	if err != nil {
 		return artifact.Reference{}, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

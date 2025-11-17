@@ -2,14 +2,16 @@ package walker
 
 import (
 	"bytes"
-	"gitee.com/anesec/mobius/directio"
-	"github.com/samber/lo"
 	"io"
 	"os"
 	"sync"
 
+	"gitee.com/anesec/mobius/directio"
+	"github.com/samber/lo"
+
 	"golang.org/x/xerrors"
 
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	xio "github.com/aquasecurity/trivy/pkg/x/io"
 )
 
@@ -42,7 +44,7 @@ func (o *cachedFile) Open() (xio.ReadSeekCloserAt, error) {
 	o.once.Do(func() {
 		// When the file is large, it will be written down to a temp file.
 		if o.size >= o.threshold {
-			dw, err := directio.CreateTemp("", "fanal-*")
+			dw, err := directio.CreateTemp(utils.TempDir(), "fanal-*")
 			if err != nil {
 				o.err = xerrors.Errorf("failed to create the temp file: %w", err)
 				return

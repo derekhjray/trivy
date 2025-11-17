@@ -15,6 +15,7 @@ import (
 	"github.com/aquasecurity/trivy/pkg/cache"
 	"github.com/aquasecurity/trivy/pkg/fanal/artifact"
 	"github.com/aquasecurity/trivy/pkg/fanal/artifact/local"
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/aquasecurity/trivy/pkg/fanal/walker"
 )
 
@@ -120,7 +121,7 @@ func tryRemoteRepo(target string, c cache.ArtifactCache, w Walker, artifactOpt a
 }
 
 func cloneRepo(u *url.URL, artifactOpt artifact.Option) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "trivy-remote-repo")
+	tmpDir, err := os.MkdirTemp(utils.TempDir(), "trivy-remote-repo")
 	if err != nil {
 		return "", xerrors.Errorf("failed to create a temp dir: %w", err)
 	}

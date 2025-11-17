@@ -18,6 +18,7 @@ import (
 	"golang.org/x/xerrors"
 
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/aquasecurity/trivy/pkg/log"
 	xio "github.com/aquasecurity/trivy/pkg/x/io"
 )
@@ -198,7 +199,7 @@ func (p *Parser) parseInnerJar(zf *zip.File, rootPath string) ([]ftypes.Package,
 		return nil, nil, xerrors.Errorf("unable to open %s: %w", zf.Name, err)
 	}
 
-	f, err := os.CreateTemp("", "inner-jar-*")
+	f, err := os.CreateTemp(utils.TempDir(), "inner-jar-*")
 	if err != nil {
 		return nil, nil, xerrors.Errorf("unable to create a temp file: %w", err)
 	}

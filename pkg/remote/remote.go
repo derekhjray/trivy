@@ -3,10 +3,13 @@ package remote
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -27,6 +30,66 @@ import (
 
 type Descriptor = remote.Descriptor
 
+func isTemporary(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return false
+	}
+
+	if te, ok := err.(interface{ Temporary() bool }); ok && te.Temporary() {
+		return true
+	}
+
+	return false
+}
+
+var (
+	retryPredicate = func(err error) bool {
+		// Various failure modes here, as we're often reading from and writing to
+		// the network.
+		if isTemporary(err) ||
+			errors.Is(err, io.ErrUnexpectedEOF) ||
+			errors.Is(err, io.EOF) ||
+			errors.Is(err, syscall.EPIPE) ||
+			errors.Is(err, syscall.ECONNRESET) ||
+			errors.Is(err, syscall.ECONNREFUSED) ||
+			errors.Is(err, syscall.ECONNABORTED) ||
+			errors.Is(err, syscall.ETIMEDOUT) ||
+			errors.Is(err, net.ErrClosed) {
+			log.Debugf("Retrying image registry service, %v", err)
+			return true
+		}
+
+		return false
+	}
+
+	// Try this ten times, total 90 seconds.
+	retryBackoff = remote.Backoff{
+		Duration: 3000 * time.Millisecond,
+		Factor:   1.45,
+		Jitter:   0.3,
+		Steps:    5,
+	}
+
+	retryStatusCodes = []int{
+		http.StatusRequestTimeout,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		499, // nginx-specific, client closed request
+		522, // Cloudflare-specific, connection timeout
+		524,
+	}
+
+	resumableBackoff = remote.Backoff{
+		Duration: 2000 * time.Millisecond,
+		Factor:   1.65,
+		Jitter:   0.3,
+		Steps:    5,
+	}
+)
+
 // Get is a wrapper of google/go-containerregistry/pkg/v1/remote.Get
 // so that it can try multiple authentication methods.
 func Get(ctx context.Context, ref name.Reference, option types.RegistryOptions) (*Descriptor, error) {
@@ -41,6 +104,11 @@ func Get(ctx context.Context, ref name.Reference, option types.RegistryOptions) 
 		remoteOpts := []remote.Option{
 			remote.WithTransport(tr),
 			remote.WithContext(ctx),
+			remote.WithResumable(),
+			remote.WithResumableBackoff(resumableBackoff),
+			remote.WithRetryBackoff(retryBackoff),
+			remote.WithRetryPredicate(retryPredicate),
+			remote.WithRetryStatusCodes(retryStatusCodes...),
 			authOpt,
 		}
 
@@ -87,6 +155,10 @@ func Image(ctx context.Context, ref name.Reference, option types.RegistryOptions
 		remoteOpts := []remote.Option{
 			remote.WithTransport(tr),
 			remote.WithContext(ctx),
+			remote.WithResumable(),
+			remote.WithRetryBackoff(retryBackoff),
+			remote.WithRetryPredicate(retryPredicate),
+			remote.WithRetryStatusCodes(retryStatusCodes...),
 			authOpt,
 		}
 		index, err := remote.Image(ref, remoteOpts...)
@@ -115,6 +187,10 @@ func Referrers(ctx context.Context, d name.Digest, option types.RegistryOptions)
 		remoteOpts := []remote.Option{
 			remote.WithTransport(tr),
 			remote.WithContext(ctx),
+			remote.WithResumable(),
+			remote.WithRetryBackoff(retryBackoff),
+			remote.WithRetryPredicate(retryPredicate),
+			remote.WithRetryStatusCodes(retryStatusCodes...),
 			authOpt,
 		}
 		index, err := remote.Referrers(d, remoteOpts...)
@@ -147,7 +223,12 @@ func httpTransport(option types.RegistryOptions) (http.RoundTripper, error) {
 		tr.TLSClientConfig.Certificates = []tls.Certificate{cert}
 	}
 
-	tripper := transport.NewUserAgent(tr, fmt.Sprintf("trivy/%s", app.Version()))
+	userAgent := os.Getenv("HTTP_USER_AGENT")
+	if userAgent == "" {
+		userAgent = fmt.Sprintf("trivy/%s", app.Version())
+	}
+
+	tripper := transport.NewUserAgent(tr, userAgent)
 	return tripper, nil
 }
 

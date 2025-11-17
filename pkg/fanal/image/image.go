@@ -23,6 +23,15 @@ var imageSourceFuncs = map[types.ImageSource]imageSourceFunc{
 	types.RemoteImageSource:     tryRemote,
 }
 
+type containerImage struct {
+	types.Image
+	source types.ImageSource
+}
+
+func (img *containerImage) Source() types.ImageSource {
+	return img.source
+}
+
 func NewContainerImage(ctx context.Context, imageName string, opt types.ImageOptions) (types.Image, func(), error) {
 	if len(opt.ImageSources) == 0 {
 		return nil, func() {}, xerrors.New("no image sources supplied")
@@ -49,7 +58,7 @@ func NewContainerImage(ctx context.Context, imageName string, opt types.ImageOpt
 		img, cleanup, err := trySrc(ctx, imageName, ref, opt)
 		if err == nil {
 			// Return v1.Image if the image is found
-			return img, cleanup, nil
+			return &containerImage{img, src}, cleanup, nil
 		}
 		err = multierror.Prefix(err, fmt.Sprintf("%s error:", src))
 		errs = multierror.Append(errs, err)

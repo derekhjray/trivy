@@ -3,13 +3,19 @@ package image
 import (
 	"context"
 	"errors"
-	"github.com/aquasecurity/trivy/pkg/parallel"
+	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
 	"sync"
 
+	"github.com/aquasecurity/trivy/pkg/parallel"
+	"github.com/sirupsen/logrus"
+
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	v1types "github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/samber/lo"
 	"golang.org/x/xerrors"
 
@@ -19,6 +25,7 @@ import (
 	"github.com/aquasecurity/trivy/pkg/fanal/handler"
 	"github.com/aquasecurity/trivy/pkg/fanal/image"
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/aquasecurity/trivy/pkg/fanal/walker"
 	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/semaphore"
@@ -258,10 +265,12 @@ func (a Artifact) inspect(ctx context.Context, missingImage string, layerKeys, b
 func (a Artifact) inspectLayer(ctx context.Context, layerInfo LayerInfo, disabled []analyzer.Type) (types.BlobInfo, error) {
 	a.logger.Debug("Missing diff ID in cache", log.String("diff_id", layerInfo.DiffID))
 
-	layerDigest, layer, err := a.uncompressedLayer(layerInfo.DiffID)
+	layerDigest, layer, cleanup, err := a.uncompressedLayer(layerInfo.DiffID)
 	if err != nil {
+		cleanup()
 		return types.BlobInfo{}, xerrors.Errorf("unable to get uncompressed layer %s: %w", layerInfo.DiffID, err)
 	}
+	defer cleanup()
 
 	// Prepare variables
 	var wg sync.WaitGroup
@@ -368,29 +377,95 @@ func (a Artifact) diffIDs(configFile *v1.ConfigFile) []string {
 	})
 }
 
-func (a Artifact) uncompressedLayer(diffID string) (string, v1.Layer, error) {
+func (a Artifact) uncompressedLayer(diffID string) (string, v1.Layer, func(), error) {
+	cleanup := func() {}
 	// diffID is a hash of the uncompressed layer
 	h, err := v1.NewHash(diffID)
 	if err != nil {
-		return "", nil, xerrors.Errorf("invalid layer ID (%s): %w", diffID, err)
+		return "", nil, cleanup, xerrors.Errorf("invalid layer ID (%s): %w", diffID, err)
 	}
 
 	layer, err := a.image.LayerByDiffID(h)
 	if err != nil {
-		return "", nil, xerrors.Errorf("failed to get the layer (%s): %w", diffID, err)
+		return "", nil, cleanup, xerrors.Errorf("failed to get the layer (%s): %w", diffID, err)
 	}
 
 	// digest is a hash of the compressed layer
 	var digest string
+
+	if img, ok := a.image.(interface{ Source() types.ImageSource }); ok && img.Source() == types.RemoteImageSource {
+		if layer, cleanup, err = a.preload(h, layer); err != nil {
+			return "", nil, cleanup, xerrors.Errorf("failed to preload layer (%s): %w", diffID, err)
+		}
+
+		d, _ := layer.Digest()
+		digest = d.String()
+	}
+
 	if a.isCompressed(layer) {
 		d, err := layer.Digest()
 		if err != nil {
-			return "", nil, xerrors.Errorf("failed to get the digest (%s): %w", diffID, err)
+			return "", nil, cleanup, xerrors.Errorf("failed to get the digest (%s): %w", diffID, err)
 		}
 		digest = d.String()
 	}
 
-	return digest, layer, nil
+	return digest, layer, cleanup, nil
+}
+
+func (a Artifact) preload(diffID v1.Hash, layer v1.Layer) (v1.Layer, func(), error) {
+	cleanup := func() {}
+
+	id := diffID.String()
+
+	logrus.Debugf("Preloading remote layer (%s)...", id)
+
+	file, err := os.CreateTemp(utils.TempDir(), fmt.Sprintf("%s.*.tar.gz", id))
+	if err != nil {
+		return nil, cleanup, xerrors.Errorf("failed to create a temporary layer file: %w", err)
+	}
+	defer file.Close()
+
+	layerFile := file.Name()
+	cleanup = func() {
+		_ = os.Remove(layerFile)
+	}
+
+	rc, err := layer.Compressed()
+	if err != nil {
+		return nil, cleanup, xerrors.Errorf("failed to get compressed layer (%s): %w", id, err)
+	}
+
+	_, err = io.Copy(file, rc)
+	rc.Close()
+
+	if err != nil {
+		return nil, cleanup, xerrors.Errorf("failed to fetch layer (%s): %w", id, err)
+	}
+
+	var (
+		options   []tarball.LayerOption
+		mediaType v1types.MediaType
+		digest    v1.Hash
+		size      int64
+	)
+
+	digest, _ = layer.Digest()
+	size, _ = layer.Size()
+
+	options = make([]tarball.LayerOption, 0, 4)
+	options = append(options, tarball.WithDiffID(diffID), tarball.WithDigest(digest), tarball.WithSize(size))
+	if mediaType, err = layer.MediaType(); err == nil {
+		options = append(options, tarball.WithMediaType(mediaType))
+	}
+
+	if layer, err = tarball.LayerFromFile(layerFile, options...); err != nil {
+		return nil, cleanup, xerrors.Errorf("failed to load local layer (%s): %w", id, err)
+	}
+
+	logrus.Debugf("Preload remote layer (%s) successfully", id)
+
+	return layer, cleanup, nil
 }
 
 // ref. https://github.com/google/go-containerregistry/issues/701

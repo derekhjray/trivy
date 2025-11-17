@@ -2,13 +2,15 @@ package analyzer
 
 import (
 	"errors"
-	"gitee.com/anesec/mobius/directio"
 	"io/fs"
 	"os"
 	"path"
 
+	"gitee.com/anesec/mobius/directio"
+
 	"golang.org/x/xerrors"
 
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 	"github.com/aquasecurity/trivy/pkg/mapfs"
 	"github.com/aquasecurity/trivy/pkg/x/sync"
 )
@@ -20,7 +22,7 @@ type CompositeFS struct {
 }
 
 func NewCompositeFS() (*CompositeFS, error) {
-	tmpDir, err := os.MkdirTemp("", "analyzer-fs-*")
+	tmpDir, err := os.MkdirTemp(utils.TempDir(), "analyzer-fs-*")
 	if err != nil {
 		return nil, xerrors.Errorf("unable to create temporary directory: %w", err)
 	}

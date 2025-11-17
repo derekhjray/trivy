@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gitee.com/anesec/mobius/directio"
 	"io"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"gitee.com/anesec/mobius/directio"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
@@ -31,6 +32,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/aquasecurity/trivy/pkg/fanal/types"
+	"github.com/aquasecurity/trivy/pkg/fanal/utils"
 )
 
 const (
@@ -132,7 +134,7 @@ func ContainerdImage(ctx context.Context, imageName string, opts types.ImageOpti
 
 	img := imgs[0]
 
-	f, err := directio.CreateTemp("", "fanal-containerd-*")
+	f, err := directio.CreateTemp(utils.TempDir(), "fanal-containerd-*")
 	if err != nil {
 		return nil, cleanup, xerrors.Errorf("failed to create a temporary file: %w", err)
 	}

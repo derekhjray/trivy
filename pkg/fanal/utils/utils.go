@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -23,6 +24,20 @@ import (
 var (
 	PathSeparator = fmt.Sprintf("%c", os.PathSeparator)
 )
+
+var tempDir = sync.OnceValue(func() string {
+	if tmpDir := os.Getenv("LYNX_TMPDIR"); tmpDir != "" {
+		if err := os.MkdirAll(tmpDir, 0750); err == nil {
+			return tmpDir
+		}
+	}
+
+	return os.TempDir()
+})
+
+func TempDir() string {
+	return tempDir()
+}
 
 func CacheDir() string {
 	cacheDir, err := os.UserCacheDir()

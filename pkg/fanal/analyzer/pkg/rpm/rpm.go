@@ -259,7 +259,7 @@ func packageProvidedByVendor(pkg *rpmdb.PackageInfo) bool {
 }
 
 func writeToTempFile(rc io.Reader) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "rpm")
+	tmpDir, err := os.MkdirTemp(utils.TempDir(), "rpm")
 	if err != nil {
 		return "", xerrors.Errorf("failed to create a temp dir: %w", err)
 	}
